@@ -27,7 +27,17 @@ const CONFIG = Object.freeze({
     }
   },
 
-  // 3. Report Profiles
+  // 3. Import Sheet Controls
+  // Configuration for the freeze/thaw data management logic
+  IMPORT: {
+    targetSheetName: 'import',
+    backupSheetName: 'import-backup',
+    anchorRowStart: 6,
+    anchorRowCount: 2, // Scans row 6 and 7
+    statusCell: 'A1'   // Cell for the visual indicator (🥶/🫠)
+  },
+
+  // 4. Report Profiles
   // Each report type has its own distinct configuration profile.
   REPORTS: {
     

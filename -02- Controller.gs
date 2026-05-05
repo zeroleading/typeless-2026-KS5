@@ -31,6 +31,9 @@ function buildDynamicMenu() {
 
   if (isSuperUser) {
     menu.addItem('Setup Subject Sheets', 'triggerSetup');
+    menu.addItem('Freeze Import Data', 'triggerFreeze');
+    menu.addItem('Thaw Import Data', 'triggerThaw');
+    menu.addSeparator(); 
     menu.addItem('Run Progress Review', 'triggerProgressReview');
     menu.addItem('Run End of Year', 'triggerEOY');
     menuHasItems = true;
@@ -57,6 +60,14 @@ function triggerSetup() {
   Setup.triggerCreateSubjectSheets();
 }
 
+function triggerFreeze() {
+  Setup.freezeImportSheet();
+}
+
+function triggerThaw() {
+  Setup.thawImportSheet();
+}
+
 function triggerProgressReview() {
   _runReportBatch(CONFIG.REPORTS.PROGRESS_REVIEW, 'Progress Reviews');
 }
@@ -75,10 +86,26 @@ function triggerUCAS() {
  */
 function _runReportBatch(reportConfig, reportFriendlyName) {
   const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Pre-run validation: Check if the import sheet is safely frozen
+  // The Why: We do not want to generate reports from data that is actively shifting/recalculating.
+  const importSheet = ss.getSheetByName('import'); 
+  if (importSheet) {
+    const status = importSheet.getRange('A1').getValue();
+    if (status !== '🥶') {
+      ui.alert(
+        'Validation Error', 
+        'The import sheet must be frozen (🥶) before generating reports. Please use the menu: Typeless Reports > Freeze Import Data.', 
+        ui.ButtonSet.OK
+      );
+      return;
+    }
+  }
+
   const response = ui.alert('Confirm', `Generate ${reportFriendlyName}?`, ui.ButtonSet.YES_NO);
   
   if (response === ui.Button.YES) {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
     ss.toast(`Gathering data for ${reportFriendlyName}...`, 'Typeless');
     
     // 1. Build the data payload

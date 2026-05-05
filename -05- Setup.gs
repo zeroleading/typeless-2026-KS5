@@ -1,13 +1,12 @@
 /**
  * Setup.gs
- * Handles the initialisation and generation of subject sheets from a master template.
+ * Handles the initialisation of subject sheets and the freeze/thaw state of the import data.
  */
 
 const Setup = {
   
   /**
    * Prompts the user to confirm the creation of subject sheets.
-   * This can be linked directly to your Controller's custom menu.
    */
   triggerCreateSubjectSheets: function() {
     const ui = SpreadsheetApp.getUi();
@@ -27,20 +26,156 @@ const Setup = {
   },
 
   /**
+   * PHASE A: Freeze the sheet and calculate column ownership based on next formula
+   */
+  freezeImportSheet: function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.IMPORT.targetSheetName);
+    
+    if (!sheet) {
+      console.log(`Sheet "${CONFIG.IMPORT.targetSheetName}" not found.`);
+      ss.toast(`Error: Sheet "${CONFIG.IMPORT.targetSheetName}" not found.`, 'Typeless');
+      return;
+    }
+
+    const lastCol = sheet.getLastColumn();
+    const lastRow = sheet.getLastRow();
+    
+    if (lastCol === 0 || lastRow < CONFIG.IMPORT.anchorRowStart) {
+      console.log("No data found in or below row 6 to freeze.");
+      return;
+    }
+
+    const anchorRange = sheet.getRange(CONFIG.IMPORT.anchorRowStart, 1, CONFIG.IMPORT.anchorRowCount, lastCol);
+    const anchorFormulas = anchorRange.getFormulas();
+    
+    let foundFormulas = [];
+    
+    for (let colIndex = 0; colIndex < lastCol; colIndex++) {
+      let formula = "";
+      let rowOffset = -1;
+
+      if (anchorFormulas[0][colIndex] !== "") {
+        formula = anchorFormulas[0][colIndex];
+        rowOffset = 0;
+      } else if (anchorFormulas[1][colIndex] !== "") {
+        formula = anchorFormulas[1][colIndex];
+        rowOffset = 1;
+      }
+
+      if (formula !== "") {
+        foundFormulas.push({
+          formula: formula,
+          colIndex: colIndex,
+          rowOffset: rowOffset
+        });
+      }
+    }
+
+    if (foundFormulas.length === 0) {
+      console.log("No formulas found in rows 6 or 7 to freeze.");
+      ss.toast("No formulas found in rows 6 or 7 to freeze.", "Typeless");
+      return;
+    }
+
+    let backupData = [["Cell", "Formula", "Start Row", "Start Col", "End Col"]];
+
+    for (let i = 0; i < foundFormulas.length; i++) {
+      const current = foundFormulas[i];
+      const startRow = CONFIG.IMPORT.anchorRowStart + current.rowOffset; // Calculate exact row (6 or 7)
+      const startCol = current.colIndex + 1;
+      let endCol;
+
+      if (i < foundFormulas.length - 1) {
+        endCol = foundFormulas[i + 1].colIndex; 
+      } else {
+        endCol = lastCol;
+      }
+
+      const cellAddress = sheet.getRange(startRow, startCol).getA1Notation();
+      backupData.push([cellAddress, "'" + current.formula, startRow, startCol, endCol]);
+    }
+
+    let backupSheet = ss.getSheetByName(CONFIG.IMPORT.backupSheetName);
+    if (!backupSheet) {
+      backupSheet = ss.insertSheet(CONFIG.IMPORT.backupSheetName);
+      backupSheet.hideSheet();
+    } else {
+      backupSheet.clear();
+    }
+    
+    backupSheet.getRange(1, 1, backupData.length, 5).setValues(backupData);
+    
+    const rowsToFlatten = lastRow - CONFIG.IMPORT.anchorRowStart + 1;
+    const freezeRange = sheet.getRange(CONFIG.IMPORT.anchorRowStart, 1, rowsToFlatten, lastCol);
+    freezeRange.setValues(freezeRange.getValues());
+    
+    sheet.getRange(CONFIG.IMPORT.statusCell).setValue('🥶');
+    console.log(`Successfully froze ${foundFormulas.length} formula(s).`);
+    ss.toast(`Successfully froze ${foundFormulas.length} formula(s).`, 'Typeless');
+  },
+
+  /**
+   * PHASE B: Thaw formulas and surgically clear their owned columns
+   */
+  thawImportSheet: function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG.IMPORT.targetSheetName);
+    const backupSheet = ss.getSheetByName(CONFIG.IMPORT.backupSheetName);
+    
+    if (!sheet || !backupSheet) {
+      console.log("Missing 'import' or backup sheet. Cannot thaw.");
+      ss.toast("Error: Missing 'import' or backup sheet.", "Typeless");
+      return;
+    }
+    
+    const backupData = backupSheet.getDataRange().getValues();
+    if (backupData.length <= 1) return; 
+    
+    const maxRows = sheet.getMaxRows(); 
+    let restoreCount = 0;
+
+    for (let i = 1; i < backupData.length; i++) {
+      const cellAddress = backupData[i][0];
+      let formulaString = backupData[i][1].toString();
+      
+      if (formulaString.startsWith("'")) {
+        formulaString = formulaString.substring(1);
+      }
+      
+      // Read the specific row and column bounds for this formula
+      const startRow = parseInt(backupData[i][2]);
+      const startCol = parseInt(backupData[i][3]);
+      const endCol = parseInt(backupData[i][4]);
+      const numCols = endCol - startCol + 1;
+      
+      // SURGICAL CLEAR: Now starts dynamically at Row 6 OR Row 7
+      const rowsToClear = maxRows - startRow + 1;
+      sheet.getRange(startRow, startCol, rowsToClear, numCols).clearContent();
+      
+      sheet.getRange(cellAddress).setFormula(formulaString);
+      restoreCount++;
+    }
+    
+    backupSheet.clear();
+    sheet.getRange(CONFIG.IMPORT.statusCell).setValue('🫠');
+    console.log(`Successfully thawed ${restoreCount} formula(s).`);
+    ss.toast(`Successfully thawed ${restoreCount} formula(s).`, 'Typeless');
+  },
+
+  /**
    * Main loop to gather subject codes and clone the template for each.
    * @private
    */
   _generateSubjectSheets: function() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Fetch the list of subjects from the named range
     const subjectCodeRange = ss.getRangeByName('lookup_Subject');
     if (!subjectCodeRange) {
       SpreadsheetApp.getUi().alert('Error', 'Could not find the named range "lookup_Subject".', SpreadsheetApp.getUi().ButtonSet.OK);
       return;
     }
 
-    // The Why: .flat() converts the 2D array to a 1D array, and .filter(String) removes any blank cells.
     const subjectCodes = subjectCodeRange.getValues().flat().filter(String);
 
     const templateSheet = ss.getSheetByName('_Xx');
@@ -49,14 +184,12 @@ const Setup = {
       return;
     }
 
-    // The Why: We fetch the template's protection settings ONCE outside the loop to save API calls.
     const templateProtections = templateSheet.getProtections(SpreadsheetApp.ProtectionType.SHEET);
     const templateProtection = templateProtections.length > 0 ? templateProtections[0] : null;
 
     let successCount = 0;
 
     subjectCodes.forEach(subjectCode => {
-      // Safeguard: Only clone if a sheet with this subject code doesn't already exist.
       if (!ss.getSheetByName(subjectCode)) {
         this._cloneTemplateForSubject(ss, templateSheet, templateProtection, subjectCode);
         successCount++;
@@ -69,26 +202,16 @@ const Setup = {
   /**
    * Clones the template sheet, renames it, and applies protections.
    * @private
-   * @param {Spreadsheet} ss The active spreadsheet object.
-   * @param {Sheet} templateSheet The master template sheet to copy.
-   * @param {Protection} templateProtection The protection object from the template.
-   * @param {string} subjectCode The code/name for the new sheet.
    */
   _cloneTemplateForSubject: function(ss, templateSheet, templateProtection, subjectCode) {
-    
-    // Clone the template and set its new name
     const newSheet = templateSheet.copyTo(ss).setName(subjectCode);
-    
-    // Insert the subject code into the designated cell (Row 2, Column 4)
     newSheet.getRange(2, 4).setValue(subjectCode);
 
-    // Apply sheet protection settings if the template had them
     if (templateProtection) {
       const newSheetProtection = newSheet.protect();
       newSheetProtection.setDescription(templateProtection.getDescription());
       newSheetProtection.setWarningOnly(templateProtection.isWarningOnly());
 
-      // Map unprotected ranges from the template to the new sheet
       const unprotectedRanges = templateProtection.getUnprotectedRanges();
       const newUnprotectedRanges = unprotectedRanges.map(range => {
         return newSheet.getRange(range.getA1Notation());
@@ -97,10 +220,7 @@ const Setup = {
       newSheetProtection.setUnprotectedRanges(newUnprotectedRanges);
     }
 
-    // Show the newly created sheet
     newSheet.showSheet();
-    
-    // Force calculation to update the UI incrementally
     SpreadsheetApp.flush();
   }
 
