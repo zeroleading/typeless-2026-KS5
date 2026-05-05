@@ -30,6 +30,7 @@ function buildDynamicMenu() {
   let menuHasItems = false;
 
   if (isSuperUser) {
+    menu.addItem('Setup Subject Sheets', 'triggerSetup');
     menu.addItem('Run Progress Review', 'triggerProgressReview');
     menu.addItem('Run End of Year', 'triggerEOY');
     menuHasItems = true;
@@ -51,6 +52,10 @@ function authoriseScript() {
 }
 
 // --- Trigger Functions ---
+
+function triggerSetup() {
+  Setup.triggerCreateSubjectSheets();
+}
 
 function triggerProgressReview() {
   _runReportBatch(CONFIG.REPORTS.PROGRESS_REVIEW, 'Progress Reviews');
