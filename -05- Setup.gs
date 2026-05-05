@@ -170,13 +170,37 @@ const Setup = {
   _generateSubjectSheets: function() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    const subjectCodeRange = ss.getRangeByName('lookup_Subject');
-    if (!subjectCodeRange) {
-      SpreadsheetApp.getUi().alert('Error', 'Could not find the named range "lookup_Subject".', SpreadsheetApp.getUi().ButtonSet.OK);
+    // Dynamically retrieve the subject details range using our Config file
+    const rangeName = CONFIG.SETUP.subjectDetailsRange;
+    const subjectRange = ss.getRangeByName(rangeName);
+    
+    if (!subjectRange) {
+      SpreadsheetApp.getUi().alert('Error', `Could not find the named range "${rangeName}".`, SpreadsheetApp.getUi().ButtonSet.OK);
       return;
     }
 
-    const subjectCodes = subjectCodeRange.getValues().flat().filter(String);
+    const data = subjectRange.getValues();
+    
+    // Safeguard: Ensure we have at least a header row and one row of data
+    if (data.length < 2) return; 
+
+    // Find the dynamic index of the 'code' column
+    const headers = data[0].map(h => String(h).toLowerCase().trim());
+    const codeColIdx = headers.indexOf('code');
+
+    if (codeColIdx === -1) {
+      SpreadsheetApp.getUi().alert('Error', 'Could not find a column headed "code" in the subject details range.', SpreadsheetApp.getUi().ButtonSet.OK);
+      return;
+    }
+
+    // Extract the subject codes, skipping the header row and ignoring blank cells
+    const subjectCodes = [];
+    for (let i = 1; i < data.length; i++) {
+      const code = data[i][codeColIdx];
+      if (code) {
+        subjectCodes.push(String(code).trim());
+      }
+    }
 
     const templateSheet = ss.getSheetByName('_Xx');
     if (!templateSheet) {

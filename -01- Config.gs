@@ -37,7 +37,12 @@ const CONFIG = Object.freeze({
     statusCell: 'A1'   // Cell for the visual indicator (🥶/🫠)
   },
 
-  // 4. Report Profiles
+  // 4. Setup Controls
+  SETUP: {
+    subjectDetailsRange: 'scopeSubjectDetails'
+  },
+
+  // 5. Report Profiles
   // Each report type has its own distinct configuration profile.
   REPORTS: {
     
