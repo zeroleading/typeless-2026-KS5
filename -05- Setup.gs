@@ -171,7 +171,7 @@ const Setup = {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
     // Dynamically retrieve the subject details range using our Config file
-    const rangeName = CONFIG.SETUP.subjectDetailsRange;
+    const rangeName = CONFIG.SCOPE.subjectDetailsRange;
     const subjectRange = ss.getRangeByName(rangeName);
     
     if (!subjectRange) {

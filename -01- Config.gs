@@ -8,7 +8,7 @@ const CONFIG = Object.freeze({
   
   // 1. Global Settings
   GLOBAL: {
-    CONTROL_SHEET_NAME: 'Control_Panel',
+    CONTROL_SHEET_NAME: 'control',
     OUTPUT_FOLDER_ID: 'YOUR_MAIN_OUTPUT_FOLDER_ID', // The parent folder for all generated reports
   },
 
@@ -38,8 +38,12 @@ const CONFIG = Object.freeze({
   },
 
   // 4. Setup Controls
-  SETUP: {
-    subjectDetailsRange: 'scopeSubjectDetails'
+  SCOPE: {
+    subjectDetailsRange: 'scopeSubjectDetails',
+    yearGroup: 'scopeYearGroup',
+    keyStage: 'scopeKeyStage',
+    academicYear: 'scopeAcademicYear',
+    collection: 'scopeCollection',
   },
 
   // 5. Report Profiles
