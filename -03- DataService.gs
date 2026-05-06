@@ -101,8 +101,13 @@ const DataService = {
     const ucasIdx = headers.indexOf('ucas');
     const rankIdx = headers.indexOf('rank');
     const ucasRefIdx = headers.indexOf('✎ ucas ref.');
+    const ci1Idx = headers.indexOf('ci1');
+    const ci2Idx = headers.indexOf('ci2');
+    const ci3Idx = headers.indexOf('ci3');
+    const ci4Idx = headers.indexOf('ci4');
     const crntIdx = headers.indexOf('crnt');
-    const nextStepsIdx = headers.indexOf('≣ nextsteps');
+    const nextSteps1Idx = headers.indexOf('≣ nextsteps1');
+    const nextSteps2Idx = headers.indexOf('≣ nextsteps2');
     const attIdx = headers.indexOf('att');
 
     // If we cannot find the admission number column, we cannot map the data.
