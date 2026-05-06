@@ -78,7 +78,7 @@ const DataService = {
     const sheetName = sheet.getName();
     
     // Construct the string for the sheet-specific named range
-    const rangeName = `${sheetName}!thisSubjectTable`;
+    const rangeName = `${sheetName}!thisSubjectAssessment`;
     const range = ss.getRangeByName(rangeName);
     
     // Safeguard: If a sheet exists but the named range hasn't been set up yet, skip it.
