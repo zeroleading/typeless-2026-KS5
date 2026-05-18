@@ -170,7 +170,21 @@ const Setup = {
   _generateSubjectSheets: function() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Dynamically retrieve the subject details range using our Config file
+    // 1. Determine the dynamic header for the subject name based on the Key Stage
+    const ksRange = ss.getRangeByName(CONFIG.SCOPE.keyStage);
+    if (!ksRange) {
+      SpreadsheetApp.getUi().alert('Error', `Could not find the named range "${CONFIG.SCOPE.keyStage}".`, SpreadsheetApp.getUi().ButtonSet.OK);
+      return;
+    }
+    
+    let ksVal = String(ksRange.getValue()).trim();
+    // Safely handle if the user types "KS5" instead of just "5"
+    if (ksVal.toUpperCase().startsWith('KS')) {
+      ksVal = ksVal.substring(2);
+    }
+    const expectedNameHeader = ('nameks' + ksVal).toLowerCase();
+
+    // 2. Dynamically retrieve the subject details range using our Config file
     const rangeName = CONFIG.SCOPE.subjectDetailsRange;
     const subjectRange = ss.getRangeByName(rangeName);
     
@@ -184,21 +198,30 @@ const Setup = {
     // Safeguard: Ensure we have at least a header row and one row of data
     if (data.length < 2) return; 
 
-    // Find the dynamic index of the 'code' column
+    // 3. Find the dynamic indices of the 'code' and target 'name' columns
     const headers = data[0].map(h => String(h).toLowerCase().trim());
     const codeColIdx = headers.indexOf('code');
+    const nameColIdx = headers.indexOf(expectedNameHeader);
 
     if (codeColIdx === -1) {
       SpreadsheetApp.getUi().alert('Error', 'Could not find a column headed "code" in the subject details range.', SpreadsheetApp.getUi().ButtonSet.OK);
       return;
     }
+    if (nameColIdx === -1) {
+      SpreadsheetApp.getUi().alert('Error', `Could not find a column headed "${expectedNameHeader}" in the subject details range.`, SpreadsheetApp.getUi().ButtonSet.OK);
+      return;
+    }
 
-    // Extract the subject codes, skipping the header row and ignoring blank cells
-    const subjectCodes = [];
+    // 4. Extract the subject details (codes and names), skipping the header row
+    const subjects = [];
     for (let i = 1; i < data.length; i++) {
       const code = data[i][codeColIdx];
+      const name = data[i][nameColIdx];
       if (code) {
-        subjectCodes.push(String(code).trim());
+        subjects.push({
+          code: String(code).trim(),
+          name: String(name).trim()
+        });
       }
     }
 
@@ -213,9 +236,9 @@ const Setup = {
 
     let successCount = 0;
 
-    subjectCodes.forEach(subjectCode => {
-      if (!ss.getSheetByName(subjectCode)) {
-        this._cloneTemplateForSubject(ss, templateSheet, templateProtection, subjectCode);
+    subjects.forEach(subject => {
+      if (!ss.getSheetByName(subject.code)) {
+        this._cloneTemplateForSubject(ss, templateSheet, templateProtection, subject);
         successCount++;
       }
     });
@@ -227,9 +250,17 @@ const Setup = {
    * Clones the template sheet, renames it, and applies protections.
    * @private
    */
-  _cloneTemplateForSubject: function(ss, templateSheet, templateProtection, subjectCode) {
-    const newSheet = templateSheet.copyTo(ss).setName(subjectCode);
-    newSheet.getRange(2, 4).setValue(subjectCode);
+  _cloneTemplateForSubject: function(ss, templateSheet, templateProtection, subject) {
+    const newSheet = templateSheet.copyTo(ss).setName(subject.code);
+    newSheet.getRange(2, 4).setValue(subject.code);
+    
+    // Inject the full subject name into the newly duplicated named range
+    const nameRangeStr = `${subject.code}!${CONFIG.SCOPE.targetSubjectNameRange}`;
+    const targetNameRange = ss.getRangeByName(nameRangeStr);
+    
+    if (targetNameRange) {
+      targetNameRange.setValue(subject.name);
+    }
 
     if (templateProtection) {
       const newSheetProtection = newSheet.protect();

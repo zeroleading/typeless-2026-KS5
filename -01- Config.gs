@@ -44,6 +44,7 @@ const CONFIG = Object.freeze({
     keyStage: 'scopeKeyStage',
     academicYear: 'scopeAcademicYear',
     collection: 'scopeCollection',
+    targetSubjectNameRange: 'thisSubjectName'
   },
 
   // 5. Report Profiles
