@@ -6,23 +6,52 @@
 const Setup = {
   
   /**
-   * Prompts the user to confirm the creation of subject sheets.
+   * Prompts the user to confirm the creation of subject sheets and checks the freeze state.
    */
   triggerCreateSubjectSheets: function() {
     const ui = SpreadsheetApp.getUi();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    // 1. Initial Confirmation
     const result = ui.alert(
       'Confirm Setup',
       'Are you sure you want to create the subject sheets?',
       ui.ButtonSet.YES_NO
     );
 
-    if (result === ui.Button.YES) {
-      SpreadsheetApp.getActiveSpreadsheet().toast('Starting sheet generation...', 'Typeless');
-      this._generateSubjectSheets();
-    } else {
+    if (result !== ui.Button.YES) {
       ui.alert('Request cancelled.');
+      return;
     }
+
+    // 2. Import Sheet State Check
+    const importSheet = ss.getSheetByName(CONFIG.IMPORT.targetSheetName);
+    if (importSheet) {
+      const currentStatus = importSheet.getRange(CONFIG.IMPORT.statusCell).getValue();
+      
+      // If it is not frozen, prompt the user
+      if (currentStatus !== '🥶') {
+        const freezeResult = ui.alert(
+          'Freeze Import Data?',
+          'The import sheet is currently active (thawed). It is recommended to freeze it before setup.\n\nWould you like to freeze the import data now?',
+          ui.ButtonSet.YES_NO_CANCEL
+        );
+
+        if (freezeResult === ui.Button.YES) {
+          // User chose to freeze; call our existing freeze logic
+          this.freezeImportSheet();
+        } else if (freezeResult === ui.Button.CANCEL || freezeResult === ui.Button.CLOSE) {
+          // User bailed out entirely
+          ui.alert('Setup cancelled.');
+          return;
+        }
+        // If the user clicked NO, we simply bypass the freeze and continue.
+      }
+    }
+
+    // 3. Execute Generation
+    ss.toast('Starting sheet generation...', 'Typeless');
+    this._generateSubjectSheets();
   },
 
   /**
@@ -178,7 +207,6 @@ const Setup = {
     }
     
     let ksVal = String(ksRange.getValue()).trim();
-    // Safely handle if the user types "KS5" instead of just "5"
     if (ksVal.toUpperCase().startsWith('KS')) {
       ksVal = ksVal.substring(2);
     }
@@ -195,7 +223,6 @@ const Setup = {
 
     const data = subjectRange.getValues();
     
-    // Safeguard: Ensure we have at least a header row and one row of data
     if (data.length < 2) return; 
 
     // 3. Find the dynamic indices of the 'code' and target 'name' columns
