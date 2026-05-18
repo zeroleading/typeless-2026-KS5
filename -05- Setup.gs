@@ -261,16 +261,27 @@ const Setup = {
     const templateProtections = templateSheet.getProtections(SpreadsheetApp.ProtectionType.SHEET);
     const templateProtection = templateProtections.length > 0 ? templateProtections[0] : null;
 
+    // Filter to find only the sheets that need to be created
+    const sheetsToCreate = subjects.filter(subject => !ss.getSheetByName(subject.code));
+    const totalSheets = sheetsToCreate.length;
+
+    if (totalSheets === 0) {
+      ss.toast('All subject sheets already exist. Setup complete.', 'Typeless Setup');
+      return;
+    }
+
     let successCount = 0;
 
-    subjects.forEach(subject => {
-      if (!ss.getSheetByName(subject.code)) {
-        this._cloneTemplateForSubject(ss, templateSheet, templateProtection, subject);
-        successCount++;
-      }
+    // Iterate through the filtered list and update the progress toast
+    sheetsToCreate.forEach((subject, index) => {
+      // The '10' parameter tells the toast to linger for up to 10 seconds, which bridges the gap until the next loop overrides it.
+      ss.toast(`Generating sheet ${index + 1} of ${totalSheets} (${subject.code})...`, 'Setup Progress', 10);
+      
+      this._cloneTemplateForSubject(ss, templateSheet, templateProtection, subject);
+      successCount++;
     });
 
-    ss.toast(`Setup complete. ${successCount} sheets successfully generated.`, 'Typeless');
+    ss.toast(`Setup complete. ${successCount} sheets successfully generated.`, 'Typeless Setup', 5);
   },
 
   /**
