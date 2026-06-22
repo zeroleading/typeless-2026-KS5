@@ -24,7 +24,7 @@ const DataService = {
     const subjectRegex = /^([A-Z][a-z]|EnL)$/;
     allSheets.forEach(sheet => {
       if (subjectRegex.test(sheet.getName())) {
-        this._processSubjectSheet(ss, sheet, studentMap, fieldMap, translations);
+        this._processSubjectSheet(ss, sheet, studentMap, fieldMap, translations, reportConfig);
       }
     });
     
@@ -138,7 +138,7 @@ const DataService = {
     }
   },
   
-  _processSubjectSheet: function(ss, sheet, studentMap, fieldMap, translations) {
+  _processSubjectSheet: function(ss, sheet, studentMap, fieldMap, translations, reportConfig) {
     const sheetName = sheet.getName();
     const nameRangeStr = `${sheetName}!${CONFIG.SCOPE.targetSubjectNameRange}`;
     const nameRange = ss.getRangeByName(nameRangeStr);
@@ -187,21 +187,37 @@ const DataService = {
         const rawCi2 = ci2Idx > -1 ? row[ci2Idx] : '';
         const rawCi3 = ci3Idx > -1 ? row[ci3Idx] : '';
         const rawCi4 = ci4Idx > -1 ? row[ci4Idx] : '';
+        const rawUcas = ucasIdx > -1 ? row[ucasIdx] : '';
+        const rawEoy = eoyIdx > -1 ? row[eoyIdx] : '';
+        const rawUcasRef = ucasRefIdx > -1 ? row[ucasRefIdx] : '';
+        const rawClassRank = classRankIdx > -1 ? row[classRankIdx] : '';
         
         // --- AUDIT CHECK ---
         let missingElements = [];
-        if (rawCrnt === '') missingElements.push('CRNT');
-        if (rawCi1 === '') missingElements.push('CI1');
-        if (rawCi2 === '') missingElements.push('CI2');
-        if (rawCi3 === '') missingElements.push('CI3');
-        if (rawCi4 === '') missingElements.push('CI4');
+        
+        if (reportConfig.name === CONFIG.REPORTS.EOY_REPORT.name) {
+          if (rawEoy === '') missingElements.push('EOY');
+        } else if (reportConfig.name === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+          if (rawUcas === '') missingElements.push('UCAS Grade');
+          if (rawClassRank === '') missingElements.push('Class Rank');
+          if (rawUcasRef === '') missingElements.push('UCAS Ref');
+        } else {
+          if (rawCrnt === '') missingElements.push('CRNT');
+          if (rawCi1 === '') missingElements.push('CI1');
+          if (rawCi2 === '') missingElements.push('CI2');
+          if (rawCi3 === '') missingElements.push('CI3');
+          if (rawCi4 === '') missingElements.push('CI4');
+        }
+
         if (missingElements.length > 0) {
           studentMap[adNo].auditIssues.push(`${fullSubjectName} (${missingElements.join(', ')})`);
         }
         // -------------------
         
-        // Direct conversion for CRNT as per KS5 requirements
+        // Direct conversion for KS5 requirements
         const safeCrnt = rawCrnt ? String(rawCrnt).trim().toUpperCase() : '';
+        const safeUcas = rawUcas ? String(rawUcas).trim().toUpperCase() : '';
+        const safeEoy = rawEoy ? String(rawEoy).trim().toUpperCase() : '';
         
         const subjectData = {
           subjectName: fullSubjectName,
@@ -217,11 +233,11 @@ const DataService = {
           // KS5 Additions
           subjAtt: subjAttIdx > -1 ? row[subjAttIdx] : '',
           subjLates: subjLatesIdx > -1 ? row[subjLatesIdx] : '',
-          ucas: ucasIdx > -1 ? row[ucasIdx] : '',
+          ucas: safeUcas,
           prd: prdIdx > -1 ? row[prdIdx] : '',
-          eoy: eoyIdx > -1 ? row[eoyIdx] : '',
-          ucasRef: ucasRefIdx > -1 ? row[ucasRefIdx] : '',
-          classRank: classRankIdx > -1 ? row[classRankIdx] : ''
+          eoy: safeEoy,
+          ucasRef: rawUcasRef,
+          classRank: rawClassRank
         };
         studentMap[adNo].subjects.push(subjectData);
       }

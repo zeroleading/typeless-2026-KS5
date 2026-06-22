@@ -25,6 +25,8 @@ function buildDynamicMenu() {
     menu.addSeparator();
     menu.addItem('Run Progress Review', 'triggerProgressReview');
     menu.addItem('Run Next Steps Summary', 'triggerNextStepsSummary');
+    menu.addSeparator();
+    menu.addItem('Run EOY Report', 'triggerEoyReport');
     menuHasItems = true;
   }
   
@@ -42,6 +44,7 @@ function triggerFreeze() { Setup.freezeImportSheet(); }
 function triggerThaw() { Setup.thawImportSheet(); }
 function triggerProgressReview() { _runReportBatch(CONFIG.REPORTS.PROGRESS_REVIEW, 'Progress Reviews'); }
 function triggerNextStepsSummary() { _runReportBatch(CONFIG.REPORTS.NEXT_STEPS_SUMMARY, 'Next Steps Summaries'); }
+function triggerEoyReport() { _runReportBatch(CONFIG.REPORTS.EOY_REPORT, 'End of Year Reports'); }
 
 /** * Shared execution logic for all report types. 
  * @private 
