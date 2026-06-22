@@ -1,116 +1,144 @@
-/**
- * DocumentBuilder.gs
- * Handles the generation of Google Docs by cloning templates and injecting data.
+/** * DocumentBuilder.gs 
+ * Handles the generation of Google Docs from templates. 
  */
-
 const DocumentBuilder = {
-
   generateBatch: function(reportConfig, studentPayload) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     const templateFile = DriveApp.getFileById(reportConfig.templateId);
     const outputFolder = DriveApp.getFolderById(CONFIG.GLOBAL.OUTPUT_FOLDER_ID);
     
     const dateStr = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd");
-    const batchFolder = outputFolder.createFolder(`${reportConfig.name} - ${dateStr}`);
-
-    studentPayload.forEach(student => {
+    
+    const academicYear = studentPayload[0]?.academicYear || '';
+    const collection = studentPayload[0]?.collection || '';
+    const yearGroup = studentPayload[0]?.yearGroup || '';
+    
+    let folderName = `${academicYear} ${collection} ${yearGroup} ${dateStr}`.trim();
+    if (reportConfig.name === CONFIG.REPORTS.NEXT_STEPS_SUMMARY.name) {
+      folderName += " next-steps";
+    } else if (reportConfig.name === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+      folderName += " ucas-refs";
+    }
+    
+    const batchFolder = outputFolder.createFolder(folderName);
+    const totalStudents = studentPayload.length;
+    
+    studentPayload.forEach((student, index) => {
       if (student.subjects && student.subjects.length > 0) {
+        ss.toast(`Merging document ${index + 1} of ${totalStudents}...\n(${student.name})`, 'Progress Tracker', 10);
         this._buildSingleDocument(student, templateFile, batchFolder, reportConfig.name);
       }
     });
-
-    return batchFolder.getId(); 
+    
+    return batchFolder.getId();
   },
-
+  
   _buildSingleDocument: function(student, templateFile, destinationFolder, reportName) {
-    const docName = `${student.adNo} - ${student.name} - ${reportName}`;
-    const newFile = templateFile.makeCopy(docName, destinationFolder);
-    const doc = DocumentApp.openById(newFile.getId());
-    const body = doc.getBody();
-    const header = doc.getHeader();
-    const footer = doc.getFooter();
-
-    // 1. Replace Global Variables 
-    this._replaceGlobalPlaceholders(body, student);
-    if (header) this._replaceGlobalPlaceholders(header, student);
-    if (footer) this._replaceGlobalPlaceholders(footer, student);
-
-    // 2. Process the dynamic Subject Table
+    const paddedAdNo = String(student.adNo).padStart(6, '0');
+    
+    let fileName = `${student.reg} ${student.name} ${paddedAdNo} ${student.shortName || ''}`.trim();
+    if (reportName === CONFIG.REPORTS.NEXT_STEPS_SUMMARY.name) {
+      fileName += " next-steps";
+    } else if (reportName === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+      fileName += " ucas-ref";
+    }
+    
+    const newDocFile = templateFile.makeCopy(fileName, destinationFolder);
+    const newDoc = DocumentApp.openById(newDocFile.getId());
+    
+    const body = newDoc.getBody();
+    const header = newDoc.getHeader();
+    const footer = newDoc.getFooter();
+    
+    const replaceGlobalsInSection = (section) => {
+      if (!section) return;
+      section.replaceText('_Name_', student.name || '');
+      section.replaceText('_Reg_', student.reg || '');
+      section.replaceText('_AdNo_', paddedAdNo);
+      section.replaceText('_Tutor_', student.tutor || '');
+      section.replaceText('_Date_', Utilities.formatDate(new Date(), "Europe/London", "dd/MM/yyyy"));
+      section.replaceText('_YearGroup_', student.yearGroup || '');
+      section.replaceText('_Collection_', student.collection || '');
+      
+      if (student.tutorInfo) {
+        section.replaceText('_AttTpAs_', student.tutorInfo.attTpAs || '-');
+        section.replaceText('_LatesTpAs_', student.tutorInfo.latesTpAs || '0');
+      }
+    };
+    
+    replaceGlobalsInSection(body);
+    replaceGlobalsInSection(header);
+    replaceGlobalsInSection(footer);
+    
+    // Inject collated UCAS references if this is the UCAS Reference report
+    if (reportName === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+      this._injectUcasReferences(body, student.subjects);
+    }
+    
     this._populateSubjectTable(body, student.subjects);
-
-    // 3. Post-Merge Polish: Make any raw URLs clickable
-    this._makeUrlsClickable(body);
-
-    doc.saveAndClose();
+    newDoc.saveAndClose();
   },
-
-  _replaceGlobalPlaceholders: function(element, student) {
-    const dateStr = Utilities.formatDate(new Date(), "Europe/London", "MMMM yyyy");
-    element.replaceText('_Name_', student.name);
-    element.replaceText('_Reg_', student.reg);
-    element.replaceText('_AdNo_', student.adNo);
-    element.replaceText('_Tutor_', student.tutor);
-    element.replaceText('_Date_', dateStr);
+  
+  _injectUcasReferences: function(body, subjects) {
+    let combinedRefs = '';
+    subjects.forEach(subj => {
+      if (subj.ucasRef) {
+        combinedRefs += `${subj.subjectName} (${subj.teacher}):\n${subj.ucasRef}\n\n`;
+      }
+    });
+    // Safely inject the collated block into the single global tag
+    body.replaceText('_Collected References_', combinedRefs.trim());
   },
-
+  
   _populateSubjectTable: function(body, subjects) {
     const tables = body.getTables();
+    if (tables.length === 0) return;
+    
     let targetTable = null;
+    let templateRow = null;
     let templateRowIndex = -1;
-
-    for (let i = 0; i < tables.length; i++) {
-      const table = tables[i];
+    
+    for (let t = 0; t < tables.length; t++) {
+      const table = tables[t];
       for (let r = 0; r < table.getNumRows(); r++) {
-        if (table.getRow(r).getText().includes('{{subjectName}}')) {
+        const row = table.getRow(r);
+        if (row.getText().includes('{{subjectName}}')) {
           targetTable = table;
+          templateRow = row.copy();
           templateRowIndex = r;
+          table.removeRow(r);
           break;
         }
       }
       if (targetTable) break;
     }
-
-    if (!targetTable || templateRowIndex === -1) return;
-
-    const templateRow = targetTable.getRow(templateRowIndex);
-
-    subjects.forEach(subject => {
-      const newRow = targetTable.appendTableRow(templateRow.copy());
-      newRow.replaceText('{{subjectName}}', subject.subjectName || '-');
-      newRow.replaceText('{{tg}}', subject.tg || '-');
-      newRow.replaceText('{{eoy}}', subject.eoy || '-');
-      newRow.replaceText('{{ucas}}', subject.ucas || '-');
-      newRow.replaceText('{{rank}}', subject.rank || '-');
-      newRow.replaceText('{{ucasRef}}', subject.ucasRef || '-');
-      newRow.replaceText('{{crnt}}', subject.crnt || '-');
-      newRow.replaceText('{{nextSteps}}', subject.nextSteps || '-');
-      newRow.replaceText('{{att}}', subject.att || '-');
-    });
-
-    targetTable.removeRow(templateRowIndex);
-  },
-
-  /**
-   * Helper: Sweeps the document body and converts raw text URLs into actual hyperlinks.
-   * @private
-   */
-  _makeUrlsClickable: function(body) {
-    const URL_PATTERN = 'http[s]?://[-a-zA-Z0-9@:%_+.~#?&//=]*';
-    let foundElement = body.findText(URL_PATTERN);
     
-    while (foundElement !== null) {
-      const foundText = foundElement.getElement().asText();
-      const start = foundElement.getStartOffset();
-      const end = foundElement.getEndOffsetInclusive();
+    if (!targetTable || !templateRow) return;
+    
+    subjects.forEach((subj, index) => {
+      const newRow = templateRow.copy();
       
-      // Extract the exact URL string
-      const url = foundText.getText().substring(start, end + 1);
+      // Standard KS3 tags
+      newRow.replaceText('{{subjectName}}', subj.subjectName || '');
+      newRow.replaceText('{{teacher}}', subj.teacher || '');
+      newRow.replaceText('{{tg}}', subj.tg || '');
+      newRow.replaceText('{{crnt}}', subj.crnt || '');
+      newRow.replaceText('{{ci1}}', subj.ci1 || '');
+      newRow.replaceText('{{ci2}}', subj.ci2 || '');
+      newRow.replaceText('{{ci3}}', subj.ci3 || '');
+      newRow.replaceText('{{ci4}}', subj.ci4 || '');
+      newRow.replaceText('{{nextSteps1}}', subj.nextSteps1 || '');
+      newRow.replaceText('{{nextSteps2}}', subj.nextSteps2 || '');
       
-      // Set the link on that specific text range
-      foundText.setLinkUrl(start, end, url);
+      // KS5 Addition Tags
+      newRow.replaceText('{{subjAtt}}', subj.subjAtt || '');
+      newRow.replaceText('{{subjLates}}', subj.subjLates || '');
+      newRow.replaceText('{{ucas}}', subj.ucas || '');
+      newRow.replaceText('{{prd}}', subj.prd || '');
+      newRow.replaceText('{{eoy}}', subj.eoy || '');
+      newRow.replaceText('{{classRank}}', subj.classRank || '');
       
-      // Find the next occurrence
-      foundElement = body.findText(URL_PATTERN, foundElement);
-    }
+      targetTable.insertTableRow(templateRowIndex + index, newRow);
+    });
   }
-
 };
