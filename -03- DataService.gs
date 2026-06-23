@@ -154,7 +154,7 @@ const DataService = {
     const headers = data[0].map(h => String(h).toLowerCase().trim());
     const adNoColIdx = headers.indexOf((fieldMap['subj_adno'] || '').toLowerCase());
     const teacherIdx = headers.indexOf((fieldMap['subj_teacher'] || '').toLowerCase());
-    const tgIdx = headers.indexOf((fieldMap['subj_tg'] || '').toLowerCase());
+    const tgIdx = headers.indexOf((fieldMap['subj_stg'] || '').toLowerCase());
     const crntIdx = headers.indexOf((fieldMap['subj_crnt'] || '').toLowerCase());
     const ci1Idx = headers.indexOf((fieldMap['subj_ci1'] || '').toLowerCase());
     const ci2Idx = headers.indexOf((fieldMap['subj_ci2'] || '').toLowerCase());

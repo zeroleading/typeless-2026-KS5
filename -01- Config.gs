@@ -44,7 +44,7 @@ const CONFIG = Object.freeze({
     tut_latesTpAs: 'lates tpas',
     subj_adno: 'adno',
     subj_teacher: 'teacher',
-    subj_tg: 'tg',
+    subj_stg: 'stg',
     subj_crnt: 'crnt',
     subj_ci1: 'ci1',
     subj_ci2: 'ci2',
@@ -55,8 +55,8 @@ const CONFIG = Object.freeze({
     // --- KS5 Specific Additions ---
     subj_att: 'att %',
     subj_lates: 'lates',
-    subj_ucas: 'ucas',
     subj_eoy: 'eoy',
+    subj_ucas: 'ucas',
     subj_ucas_ref: '✎ ucas ref.',
     subj_class_rank: 'rank'
   },
