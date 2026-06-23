@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        padding: 16px; 
+        color: #4a4a4a; 
+        background-color: #fdfdfd;
+      }
+      .form-group { 
+        margin-bottom: 20px; 
+      }
+      .form-group > label {
+        font-weight: 600;
+        font-size: 0.8em;
+        color: #718096;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      input[type="text"] { 
+        width: 100%; 
+        padding: 10px 12px; 
+        box-sizing: border-box; 
+        margin-top: 8px; 
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background-color: #ffffff;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #b3cde0;
+        box-shadow: 0 0 0 3px rgba(179, 205, 224, 0.2);
+      }
+      .btn-container {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      button { 
+        flex: 1;
+        padding: 10px 14px; 
+        cursor: pointer; 
+        background-color: #0081af; /* Primary Blue */
+        color: #ffffff; 
+        border: none; 
+        border-radius: 8px; 
+        font-size: 0.9em;
+        font-weight: 600;
+        transition: background-color 0.2s ease, transform 0.1s ease;
+      }
+      button:hover { 
+        background-color: #006b91; 
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button.secondary { 
+        background-color: #edf2f7; /* Soft grey */
+        color: #4a5568; 
+      }
+      button.secondary:hover {
+        background-color: #e2e8f0;
+      }
+      #outputArea { 
+        margin-top: 24px; 
+        white-space: pre-wrap; 
+        font-size: 0.85em; 
+        background: #ffffff; 
+        padding: 16px; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 8px;
+        min-height: 100px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        line-height: 1.5;
+      }
+      .loader { 
+        display: none; 
+        color: #a0aec0; 
+        font-style: italic; 
+        margin-top: 16px;
+        font-size: 0.85em;
+        text-align: center;
+      }
+      .success-link {
+        color: #68d391; /* Pastel Green */
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .success-link:hover {
+        color: #48bb78;
+      }
+      .student-list {
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 6px;
+        margin-top: 12px;
+        background: #ffffff;
+      }
+      .student-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 2px;
+        font-size: 0.85em;
+        font-weight: 400;
+        text-transform: none;
+        color: #4a4a4a;
+        padding: 8px 8px 8px 4px; /* Reduced left padding to offset the border */
+        border-left: 4px solid transparent; /* Invisible structural border */
+        border-radius: 0 6px 6px 0; /* Square on the left, rounded on the right */
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+        cursor: pointer;
+      }
+      .student-item:hover {
+        background-color: #f7fafc;
+      }
+      .student-checkbox {
+        accent-color: #0081af;
+        cursor: pointer;
+      }
+      .early-app-ribbon {
+        border-left-color: #0081af; /* Primary Blue Edge */
+        background-color: #f0f8fb; /* Light blue tint */
+      }
+      .filter-container {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        padding-bottom: 4px;
+      }
+      .filter-container label {
+        font-weight: 400;
+        text-transform: none;
+        font-size: 0.85em;
+        letter-spacing: 0;
+        color: #4a5568;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="form-group">
+      <label for="searchInput">Search Students</label>
+      <input type="text" id="searchInput" onkeyup="filterList()" placeholder="Search by name...">
+      
+      <div class="filter-container">
+        <input type="checkbox" id="earlyAppToggle" onchange="filterList()" style="cursor: pointer;">
+        <label for="earlyAppToggle">Show Early Applicants Only</label>
+      </div>
+      
+      <div id="studentListContainer" class="student-list">
+        <span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">Loading students...</span>
+      </div>
+    </div>
+    
+    <div class="btn-container">
+      <button class="secondary" onclick="getPreview()">Preview Text</button>
+      <button onclick="runMerge()">Run Merge</button>
+    </div>
+    
+    <div id="statusIndicator" class="loader">Processing... please wait.</div>
+    <div id="outputArea">Awaiting instruction...</div>
+
+    <script>
+      let allStudents = [];
+
+      // Load students as soon as the sidebar opens
+      window.onload = function() {
+        google.script.run
+          .withSuccessHandler(function(students) {
+            allStudents = students;
+            renderList(allStudents);
+          })
+          .withFailureHandler(function(err) {
+            document.getElementById('studentListContainer').innerHTML = '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load students.</span>';
+          })
+          .sidebarGetStudentList();
+      };
+
+      function renderList(students) {
+        const container = document.getElementById('studentListContainer');
+        if (students.length === 0) {
+          container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No students found.</span>';
+          return;
+        }
+        
+        let html = '';
+        students.forEach(function(s) {
+          const ribbonClass = s.earlyApp ? ' early-app-ribbon' : '';
+          html += '<label class="student-item' + ribbonClass + '">' +
+                  '<input type="checkbox" class="student-checkbox" value="' + s.adNo + '">' +
+                  s.name +
+                  '</label>';
+        });
+        container.innerHTML = html;
+      }
+
+      function filterList() {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        const showEarlyOnly = document.getElementById('earlyAppToggle').checked;
+        
+        const filtered = allStudents.filter(function(s) {
+          const matchesName = s.name.toLowerCase().includes(term);
+          const matchesEarly = showEarlyOnly ? s.earlyApp === true : true;
+          return matchesName && matchesEarly;
+        });
+        
+        renderList(filtered);
+      }
+
+      function getSelectedAdnos() {
+        const checkboxes = document.querySelectorAll('.student-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+      }
+
+      function setStatus(msg, isLoading) {
+        document.getElementById('statusIndicator').style.display = isLoading ? 'block' : 'none';
+        if (msg) document.getElementById('outputArea').innerHTML = msg;
+      }
+
+      function getPreview() {
+        const selected = getSelectedAdnos();
+        if (selected.length === 0) return setStatus('<span style="color:#e53e3e;">Please select a student to preview.</span>', false);
+        if (selected.length > 1) return setStatus('<span style="color:#e53e3e;">Preview is only available for a single student. Please select only one.</span>', false);
+
+        setStatus('Fetching preview data...', true);
+        
+        google.script.run
+          .withSuccessHandler(function(result) {
+            setStatus('', false);
+            if (result.error) {
+              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + result.error + '</span>';
+            } else {
+              document.getElementById('outputArea').innerHTML = '<strong style="color: #2d3748; font-size: 1.1em;">' + result.name + '</strong><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0;">' + result.previewText;
+            }
+          })
+          .withFailureHandler(function(err) {
+            setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
+          })
+          .sidebarGetUcasPreview(selected[0]);
+      }
+
+      function runMerge() {
+        const selected = getSelectedAdnos();
+        if (selected.length === 0) return setStatus('<span style="color:#e53e3e;">Please select at least one student to merge.</span>', false);
+
+        setStatus('Merging documents... this may take a moment. Check the main sheet for progress toasts.', true);
+        
+        const adnoString = selected.join(',');
+        
+        google.script.run
+          .withSuccessHandler(function(url) {
+            setStatus('', false);
+            if (url.startsWith('http')) {
+              document.getElementById('outputArea').innerHTML = 
+                '<strong style="color:#48bb78; font-size: 1.1em;">Merge Complete!</strong><br><br>' + 
+                '<a href="' + url + '" target="_blank" class="success-link">View Generated Folder &rarr;</a>';
+            } else {
+              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + url + '</span>';
+            }
+          })
+          .withFailureHandler(function(err) {
+            setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
+          })
+          .sidebarRunUcasMerge(adnoString);
+      }
+    </script>
+  </body>
+</html>
