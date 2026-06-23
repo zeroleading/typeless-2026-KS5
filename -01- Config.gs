@@ -53,13 +53,12 @@ const CONFIG = Object.freeze({
     subj_ns1: '≣ nextsteps1',
     subj_ns2: '≣ nextsteps2',
     // --- KS5 Specific Additions ---
-    subj_att: 'subject att %',
-    subj_lates: 'subject lates',
-    subj_ucas: 'ucas grade',
-    subj_prd: 'prd grade',
-    subj_eoy: 'eoy grade',
-    subj_ucas_ref: 'ucas reference',
-    subj_class_rank: 'class rank'
+    subj_att: 'att %',
+    subj_lates: 'lates',
+    subj_ucas: 'ucas',
+    subj_eoy: 'eoy',
+    subj_ucas_ref: '✎ ucas ref.',
+    subj_class_rank: 'rank'
   },
   // 6. Report Profiles
   REPORTS: {
