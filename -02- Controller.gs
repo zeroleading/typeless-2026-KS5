@@ -43,9 +43,93 @@ function authoriseScript() {
 function triggerSetup() { Setup.triggerCreateSubjectSheets(); }
 function triggerFreeze() { Setup.freezeImportSheet(); }
 function triggerThaw() { Setup.thawImportSheet(); }
-function triggerProgressReview() { _runReportBatch(CONFIG.REPORTS.PROGRESS_REVIEW, 'Progress Reviews'); }
-function triggerNextStepsSummary() { _runReportBatch(CONFIG.REPORTS.NEXT_STEPS_SUMMARY, 'Next Steps Summaries'); }
-function triggerEoyReport() { _runReportBatch(CONFIG.REPORTS.EOY_REPORT, 'End of Year Reports'); }
+
+// --- KS5 REPORT TRIGGERS ---
+function triggerProgressReview() { showBatchModal('PROGRESS_REVIEW', 'Progress Reviews'); }
+function triggerNextStepsSummary() { showBatchModal('NEXT_STEPS_SUMMARY', 'Next Steps Summaries'); }
+function triggerEoyReport() { showBatchModal('EOY_REPORT', 'End of Year Reports'); }
+
+/**
+ * Opens the new Chunking Modal for heavy report generation.
+ */
+function showBatchModal(configKey, friendlyName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const importSheet = ss.getSheetByName('import');
+  
+  if (importSheet) {
+    const status = importSheet.getRange('A1').getValue();
+    if (status !== '🥶') {
+      SpreadsheetApp.getUi().alert('Validation Error', 'The import sheet must be frozen (🥶) before generating reports.', SpreadsheetApp.getUi().ButtonSet.OK);
+      return;
+    }
+  }
+
+  // Use HtmlTemplate to pass variables to the HTML file
+  const template = HtmlService.createTemplateFromFile('-10- BatchGeneration');
+  template.configKey = configKey;
+  template.friendlyName = friendlyName;
+  
+  const html = template.evaluate()
+      .setWidth(450)
+      .setHeight(380)
+      .setTitle('Batch Generator');
+      
+  SpreadsheetApp.getUi().showModalDialog(html, 'Report Engine');
+}
+
+/**
+ * Called by the Modal (Step 1): Prepares the folder and audits the data.
+ */
+function server_initBatch(configKey, forceProceed) {
+  const reportConfig = CONFIG.REPORTS[configKey];
+  const payload = DataService.buildStudentDataPayload(reportConfig);
+
+  if (payload.length === 0) return { error: "No student data found." };
+
+  // 1. Audit Check
+  if (!forceProceed) {
+    const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
+    if (studentsWithIssues.length > 0) {
+      const issuesList = studentsWithIssues.map(s => `<b>${s.name}</b>: ${s.auditIssues.join(' | ')}`);
+      return {
+        status: 'audit_warning',
+        issues: issuesList,
+        totalStudents: payload.length
+      };
+    }
+  }
+
+  // 2. Folder Creation
+  const folderId = DocumentBuilder.createBatchFolder(reportConfig, payload[0]);
+  
+  return {
+    status: 'ready',
+    folderId: folderId,
+    folderUrl: `https://drive.google.com/drive/folders/${folderId}`,
+    totalStudents: payload.length
+  };
+}
+
+/**
+ * Called by the Modal (Step 3 Loop): Processes a specific chunk of students.
+ */
+function server_processChunk(configKey, folderId, startIndex, chunkSize) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const reportConfig = CONFIG.REPORTS[configKey];
+  
+  // Re-build payload dynamically (fast and keeps memory lean)
+  const payload = DataService.buildStudentDataPayload(reportConfig);
+  
+  // Slice out just the 10 students requested
+  const chunk = payload.slice(startIndex, startIndex + chunkSize);
+
+  ss.toast(`Merging chunk: ${startIndex + 1} to ${startIndex + chunk.length}...`, 'Background Engine');
+  
+  // Send to builder
+  DocumentBuilder.generateChunk(reportConfig, chunk, folderId);
+  
+  return { success: true };
+}
 
 /**
  * Opens the HTML sidebar for UCAS Reference operations.
@@ -67,10 +151,10 @@ function sidebarGetStudentList() {
   const list = Object.values(studentMap).map(s => ({
     name: s.name,
     adNo: s.adNo,
+    reg: s.reg,
     earlyApp: s.earlyApp
   }));
   
-  // Sort alphabetically by name
   list.sort((a, b) => a.name.localeCompare(b.name));
   return list;
 }
@@ -96,28 +180,23 @@ function sidebarRunUcasMerge(adnoString) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const adnos = adnoString.split(',').map(s => s.trim()).filter(s => s);
     
-    // 1. Build full payload
     let payload = DataService.buildStudentDataPayload(CONFIG.REPORTS.UCAS_REFERENCE);
     
-    // 2. Filter by requested adnos
     payload = payload.filter(s => 
       adnos.includes(String(s.adNo)) || adnos.includes(String(s.adNo).padStart(6, '0'))
     );
     
     if (payload.length === 0) return "Error: No matching students found.";
     
-    // 3. Strict Audit check - Sidebars cannot handle Yes/No prompts well, so we enforce strict rules here.
     const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
     if (studentsWithIssues.length > 0) {
       const names = studentsWithIssues.map(s => s.name).join(', ');
       return `Error: Missing UCAS data detected for ${names}. Please resolve on the subject sheets before merging.`;
     }
     
-    // 4. Generate the documents
     ss.toast(`Generating UCAS references for ${payload.length} student(s)...`, 'Typeless');
     const folderId = DocumentBuilder.generateBatch(CONFIG.REPORTS.UCAS_REFERENCE, payload);
     
-    // 5. Return the clickable Google Drive folder URL
     return `https://drive.google.com/drive/folders/${folderId}`;
   } catch (e) {
     return "System Error: " + e.message;
@@ -135,21 +214,18 @@ function _runReportBatch(reportConfig, reportFriendlyName) {
   if (importSheet) {
     const status = importSheet.getRange('A1').getValue();
     if (status !== '🥶') {
-      ui.alert('Validation Error', 'The import sheet must be frozen (🥶) before generating reports. Please use the menu: Typeless Reports > Freeze Import Data.', ui.ButtonSet.OK);
+      ui.alert('Validation Error', 'The import sheet must be frozen (🥶) before generating reports.', ui.ButtonSet.OK);
       return;
     }
   }
   
-  // Include the batching prompt
   const batchPrompt = ui.prompt('Batch Run', `Generate ${reportFriendlyName}?\n\nEnter a number to run a test batch, or leave blank to run the whole cohort:`, ui.ButtonSet.OK_CANCEL);
   
   if (batchPrompt.getSelectedButton() !== ui.Button.OK) {
-    return; // User cancelled
+    return;
   }
   
   ss.toast(`Gathering and auditing data for ${reportFriendlyName}...`, 'Typeless');
-  
-  // 1. Build Payload
   let payload = DataService.buildStudentDataPayload(reportConfig);
   
   if (payload.length === 0) {
@@ -157,18 +233,15 @@ function _runReportBatch(reportConfig, reportFriendlyName) {
     return;
   }
   
-  // 2. Slice payload if it's a test batch
   const batchInput = batchPrompt.getResponseText().trim();
   if (batchInput !== '' && !isNaN(batchInput)) {
     const limit = parseInt(batchInput, 10);
     if (limit > 0) payload = payload.slice(0, limit);
   }
   
-  // --- 3. PRE-FLIGHT AUDIT CHECK ---
   const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
   if (studentsWithIssues.length > 0) {
     let issueText = `Missing data detected for ${studentsWithIssues.length} student(s) in this run.\n\nAffected Students:\n`;
-    // Loop through ALL affected students without a display limit
     studentsWithIssues.forEach(stu => {
       issueText += `• ${stu.name}: ${stu.auditIssues.join(' | ')}\n`;
     });
@@ -181,7 +254,6 @@ function _runReportBatch(reportConfig, reportFriendlyName) {
     }
   }
   
-  // 4. Generate the documents
   ss.toast(`Generating documents for ${payload.length} students...`, 'Typeless');
   const folderId = DocumentBuilder.generateBatch(reportConfig, payload);
   ui.alert('Merge Complete', `Documents generated successfully.\nFolder ID: ${folderId}`, ui.ButtonSet.OK);

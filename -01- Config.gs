@@ -77,7 +77,7 @@ const CONFIG = Object.freeze({
     },
     EOY_REPORT: {
       name: 'End of Year Report',
-      templateId: 'PLACEHOLDER_EOY_ID'
+      templateId: '1t9q9tDKkwt0zvJ1ppocfR5AdKYo7DQU24o13JfG5Wqg'
     }
   }
 });

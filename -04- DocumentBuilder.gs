@@ -2,6 +2,38 @@
  * Handles the generation of Google Docs from templates. 
  */
 const DocumentBuilder = {
+  
+  // --- NEW CHUNKING ENGINE METHODS ---
+  
+  createBatchFolder: function(reportConfig, sampleStudent) {
+    const outputFolder = DriveApp.getFolderById(CONFIG.GLOBAL.OUTPUT_FOLDER_ID);
+    const dateStr = Utilities.formatDate(new Date(), "Europe/London", "yyyy-MM-dd");
+    
+    const academicYear = sampleStudent?.academicYear || '';
+    const collection = sampleStudent?.collection || '';
+    const yearGroup = sampleStudent?.yearGroup || '';
+    
+    let folderName = `${academicYear} ${collection} ${yearGroup} ${dateStr}`.trim();
+    if (reportConfig.name === CONFIG.REPORTS.NEXT_STEPS_SUMMARY.name) folderName += " next-steps";
+    if (reportConfig.name === CONFIG.REPORTS.EOY_REPORT.name) folderName += " EOY";
+    
+    const batchFolder = outputFolder.createFolder(folderName);
+    return batchFolder.getId();
+  },
+
+  generateChunk: function(reportConfig, chunkPayload, folderId) {
+    const templateFile = DriveApp.getFileById(reportConfig.templateId);
+    const batchFolder = DriveApp.getFolderById(folderId);
+    
+    chunkPayload.forEach((student) => {
+      if (student.subjects && student.subjects.length > 0) {
+        this._buildSingleDocument(student, templateFile, batchFolder, reportConfig.name);
+      }
+    });
+  },
+
+  // --- EXISTING METHODS (Used by UCAS Sidebar) ---
+  
   generateBatch: function(reportConfig, studentPayload) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const templateFile = DriveApp.getFileById(reportConfig.templateId);
@@ -70,7 +102,6 @@ const DocumentBuilder = {
     replaceGlobalsInSection(header);
     replaceGlobalsInSection(footer);
     
-    // Inject collated UCAS references if this is the UCAS Reference report
     if (reportName === CONFIG.REPORTS.UCAS_REFERENCE.name) {
       this._injectUcasReferences(body, student.subjects);
     }
@@ -86,7 +117,6 @@ const DocumentBuilder = {
         combinedRefs += `${subj.subjectName} (${subj.teacher}):\n${subj.ucasRef}\n\n`;
       }
     });
-    // Safely inject the collated block into the single global tag
     body.replaceText('_Collected References_', combinedRefs.trim());
   },
   
@@ -118,7 +148,6 @@ const DocumentBuilder = {
     subjects.forEach((subj, index) => {
       const newRow = templateRow.copy();
       
-      // Standard KS3 tags
       newRow.replaceText('{{subjectName}}', subj.subjectName || '');
       newRow.replaceText('{{teacher}}', subj.teacher || '');
       newRow.replaceText('{{tg}}', subj.tg || '');
@@ -130,7 +159,6 @@ const DocumentBuilder = {
       newRow.replaceText('{{nextSteps1}}', subj.nextSteps1 || '');
       newRow.replaceText('{{nextSteps2}}', subj.nextSteps2 || '');
       
-      // KS5 Addition Tags
       newRow.replaceText('{{subjAtt}}', subj.subjAtt || '');
       newRow.replaceText('{{subjLates}}', subj.subjLates || '');
       newRow.replaceText('{{ucas}}', subj.ucas || '');
