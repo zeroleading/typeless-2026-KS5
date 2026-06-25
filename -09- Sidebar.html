@@ -55,7 +55,7 @@
         border-radius: 8px; min-height: 100px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         line-height: 1.5;
       }
-      .loader { display: none; color: #a0aec0; font-style: italic; margin-top: 16px; font-size: 0.85em; text-align: center; }
+      .loader { display: none; margin-top: 16px; text-align: center; }
       .success-link { color: #0081af; font-weight: 600; text-decoration: none; }
       .success-link:hover { color: #006b91; text-decoration: underline; }
       .student-list { max-height: 240px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; margin-top: 12px; background: #ffffff; }
@@ -80,6 +80,28 @@
         color: #4a5568;
         cursor: pointer;
       }
+
+      /* --- SPINNER ANIMATION --- */
+      .spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(0, 129, 175, 0.2);
+        border-radius: 50%;
+        border-top-color: #0081af;
+        animation: spin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .processing-text {
+        display: inline-flex;
+        align-items: center;
+        color: #0081af;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -93,7 +115,7 @@
       </label>
 
       <div id="studentListContainer" class="student-list">
-        <span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">Loading students...</span>
+        <span class="processing-text" style="padding: 8px;"><div class="spinner"></div> Fetching student data...</span>
       </div>
     </div>
     
@@ -102,7 +124,7 @@
       <button onclick="runMerge()">Run Merge</button>
     </div>
     
-    <div id="statusIndicator" class="loader">Processing... please wait.</div>
+    <div id="statusIndicator" class="loader"></div>
     <div id="outputArea">Awaiting instruction...</div>
 
     <script>
@@ -156,8 +178,17 @@
       }
 
       function setStatus(msg, isLoading) {
-        document.getElementById('statusIndicator').style.display = isLoading ? 'block' : 'none';
-        if (msg) document.getElementById('outputArea').innerHTML = msg;
+        const indicator = document.getElementById('statusIndicator');
+        const output = document.getElementById('outputArea');
+        
+        if (isLoading) {
+          indicator.style.display = 'block';
+          indicator.innerHTML = '<span class="processing-text"><div class="spinner"></div> ' + msg + '</span>';
+          output.innerHTML = '';
+        } else {
+          indicator.style.display = 'none';
+          if (msg) output.innerHTML = msg;
+        }
       }
 
       function getPreview() {
@@ -195,7 +226,7 @@
           return;
         }
 
-        setStatus('Merging documents... this may take a moment. Check the main sheet for progress toasts.', true);
+        setStatus('Merging documents...', true);
         
         const adnoString = selected.join(',');
         
