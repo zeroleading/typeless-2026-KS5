@@ -64,11 +64,11 @@ const CONFIG = Object.freeze({
   REPORTS: {
     PROGRESS_REVIEW: {
       name: 'Progress Review',
-      templateId: '1mqVkM7VBjok1Hpe9KSCxpnZkkyRIRDF70dZt2zJrVUo'
+      templateId: '1GiRm5ry4MCUWEMzHyAdRpqYGoeJcid3smTDaH7gIizE'
     },
     NEXT_STEPS_SUMMARY: {
       name: 'Next Steps Summary',
-      templateId: '1Z6O8k6C67vDBp3heHZ-9reT5Glfnc8lLZ-dqpUivf74'
+      templateId: '1no4SLsNv1N74s9a5l_2Lo4qp1v6ZG-Hnfbvh51puTmw'
     },
     // --- KS5 Specific Reports ---
     UCAS_REFERENCE: {
