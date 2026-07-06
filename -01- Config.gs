@@ -13,7 +13,7 @@ const CONFIG = Object.freeze({
       'jappleton@csg.school',
       'tnayagam@csg.school'
     ],
-    REPORT_SPECIFIC: {}
+    REPORT_SPECIFIC: { UCAS: ['nbayley@csg.school'] }
   },
   // 3. Import Sheet Controls
   IMPORT: {

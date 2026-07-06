@@ -222,7 +222,7 @@ const DataService = {
     const headers = data[0].map(h => String(h).toLowerCase().trim());
     const adNoColIdx = headers.indexOf((fieldMap['subj_adno'] || '').toLowerCase());
     const teacherIdx = headers.indexOf((fieldMap['subj_teacher'] || '').toLowerCase());
-    const tgIdx = headers.indexOf((fieldMap['subj_tg'] || '').toLowerCase());
+    const stgIdx = headers.indexOf((fieldMap['subj_stg'] || '').toLowerCase());
     const crntIdx = headers.indexOf((fieldMap['subj_crnt'] || '').toLowerCase());
     const ci1Idx = headers.indexOf((fieldMap['subj_ci1'] || '').toLowerCase());
     const ci2Idx = headers.indexOf((fieldMap['subj_ci2'] || '').toLowerCase());
@@ -258,7 +258,7 @@ const DataService = {
           }
         }
         
-        const rawTg = tgIdx > -1 ? row[tgIdx] : '';
+        const rawStg = stgIdx > -1 ? row[stgIdx] : '';
         const rawCrnt = crntIdx > -1 ? row[crntIdx] : '';
         const rawCi1 = ci1Idx > -1 ? row[ci1Idx] : '';
         const rawCi2 = ci2Idx > -1 ? row[ci2Idx] : '';
@@ -307,7 +307,7 @@ const DataService = {
         const subjectData = {
           subjectName: finalSubjectName,
           teacher: teacherIdx > -1 ? row[teacherIdx] : '',
-          tg: this._translate(rawTg, 'CRNT', translations),
+          stg: this._translate(rawStg, 'CRNT', translations),
           crnt: safeCrnt,
           ci1: this._translate(rawCi1, 'CI', translations),
           ci2: this._translate(rawCi2, 'CI', translations),
