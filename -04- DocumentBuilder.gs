@@ -21,12 +21,20 @@ const DocumentBuilder = {
     return batchFolder.getId();
   },
 
-  generateChunk: function(reportConfig, chunkPayload, folderId) {
+  generateChunk: function(reportConfig, chunkPayload, folderId, auditMode = 'ignore') {
     const templateFile = DriveApp.getFileById(reportConfig.templateId);
     const batchFolder = DriveApp.getFolderById(folderId);
     
     chunkPayload.forEach((student) => {
-      if (student.subjects && student.subjects.length > 0) {
+      // 1. Filter the subjects if the user selected to drop incomplete ones
+      let validSubjects = student.subjects || [];
+      if (auditMode === 'drop') {
+        validSubjects = validSubjects.filter(subj => this._isSubjectComplete(subj, reportConfig.name));
+      }
+
+      // 2. Only generate a document if there is at least one valid subject left
+      if (validSubjects.length > 0) {
+        student.subjects = validSubjects; // Overwrite payload to exclude dropped subjects
         this._buildSingleDocument(student, templateFile, batchFolder, reportConfig.name);
       }
     });
@@ -34,7 +42,7 @@ const DocumentBuilder = {
 
   // --- EXISTING METHODS (Used by UCAS Sidebar) ---
   
-  generateBatch: function(reportConfig, studentPayload) {
+  generateBatch: function(reportConfig, studentPayload, auditMode = 'ignore') {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const templateFile = DriveApp.getFileById(reportConfig.templateId);
     const outputFolder = DriveApp.getFolderById(CONFIG.GLOBAL.OUTPUT_FOLDER_ID);
@@ -56,13 +64,40 @@ const DocumentBuilder = {
     const totalStudents = studentPayload.length;
     
     studentPayload.forEach((student, index) => {
-      if (student.subjects && student.subjects.length > 0) {
+      // 1. Filter the subjects if the user selected to drop incomplete ones
+      let validSubjects = student.subjects || [];
+      if (auditMode === 'drop') {
+        validSubjects = validSubjects.filter(subj => this._isSubjectComplete(subj, reportConfig.name));
+      }
+
+      // 2. Only generate a document if there is at least one valid subject left
+      if (validSubjects.length > 0) {
+        student.subjects = validSubjects; // Overwrite payload to exclude dropped subjects
         ss.toast(`Merging document ${index + 1} of ${totalStudents}...\n(${student.name})`, 'Progress Tracker', 10);
         this._buildSingleDocument(student, templateFile, batchFolder, reportConfig.name);
       }
     });
     
     return batchFolder.getId();
+  },
+
+  /**
+   * Helper logic to determine if a subject meets the minimum data requirements
+   */
+  _isSubjectComplete: function(subj, reportName) {
+    if (reportName === CONFIG.REPORTS.EOY_REPORT.name) {
+      return subj.eoy !== '';
+    } else if (reportName === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+      return subj.ucas !== '' && subj.classRank !== '' && subj.ucasRef !== '';
+    } else {
+      // Progress Review and Next Steps Summaries
+      return subj.crnt !== '' &&
+             subj.ci1 !== '' &&
+             subj.ci2 !== '' &&
+             subj.ci3 !== '' &&
+             subj.ci4 !== '' &&
+             (subj.nextSteps1 !== '' || subj.nextSteps2 !== ''); // Fails if BOTH are blank
+    }
   },
   
   _buildSingleDocument: function(student, templateFile, destinationFolder, reportName) {

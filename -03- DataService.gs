@@ -284,6 +284,9 @@ const DataService = {
           if (rawCi2 === '') missingElements.push('CI2');
           if (rawCi3 === '') missingElements.push('CI3');
           if (rawCi4 === '') missingElements.push('CI4');
+          const rawNs1 = ns1Idx > -1 ? String(row[ns1Idx]).trim() : '';
+          const rawNs2 = ns2Idx > -1 ? String(row[ns2Idx]).trim() : '';
+          if (rawNs1 === '' && rawNs2 === '') missingElements.push('Next Steps');
         }
 
         if (missingElements.length > 0) {
@@ -298,6 +301,7 @@ const DataService = {
           return g === 'X' ? 'Pending' : g;
         };
         
+        const safeStg = formatGrade(rawStg);
         const safeCrnt = formatGrade(rawCrnt);
         const safeUcas = formatGrade(rawUcas);
         const safeEoy = formatGrade(rawEoy);
@@ -307,7 +311,7 @@ const DataService = {
         const subjectData = {
           subjectName: finalSubjectName,
           teacher: teacherIdx > -1 ? row[teacherIdx] : '',
-          stg: this._translate(rawStg, 'CRNT', translations),
+          stg: safeStg,
           crnt: safeCrnt,
           ci1: this._translate(rawCi1, 'CI', translations),
           ci2: this._translate(rawCi2, 'CI', translations),

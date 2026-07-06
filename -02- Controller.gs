@@ -80,14 +80,14 @@ function showBatchModal(configKey, friendlyName) {
 /**
  * Called by the Modal (Step 1): Prepares the folder and audits the data.
  */
-function server_initBatch(configKey, forceProceed) {
+function server_initBatch(configKey, auditMode) {
   const reportConfig = CONFIG.REPORTS[configKey];
   const payload = DataService.buildStudentDataPayload(reportConfig);
 
   if (payload.length === 0) return { error: "No student data found." };
 
   // 1. Audit Check
-  if (!forceProceed) {
+  if (!auditMode) {
     const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
     if (studentsWithIssues.length > 0) {
       const issuesList = studentsWithIssues.map(s => `<b>${s.name}</b>: ${s.auditIssues.join(' | ')}`);
@@ -113,7 +113,7 @@ function server_initBatch(configKey, forceProceed) {
 /**
  * Called by the Modal (Step 3 Loop): Processes a specific chunk of students.
  */
-function server_processChunk(configKey, folderId, startIndex, chunkSize) {
+function server_processChunk(configKey, folderId, startIndex, chunkSize, auditMode) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const reportConfig = CONFIG.REPORTS[configKey];
   
@@ -126,7 +126,7 @@ function server_processChunk(configKey, folderId, startIndex, chunkSize) {
   ss.toast(`Merging chunk: ${startIndex + 1} to ${startIndex + chunk.length}...`, 'Background Engine');
   
   // Send to builder
-  DocumentBuilder.generateChunk(reportConfig, chunk, folderId);
+  DocumentBuilder.generateChunk(reportConfig, chunk, folderId, auditMode);
   
   return { success: true };
 }
