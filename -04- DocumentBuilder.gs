@@ -141,8 +141,93 @@ const DocumentBuilder = {
       this._injectUcasReferences(body, student.subjects);
     }
     
+    this._processConditionalUcasTable(body, student, reportName);
     this._populateSubjectTable(body, student.subjects);
     newDoc.saveAndClose();
+  },
+
+  /**
+   * Conditionally injects or removes the UCAS grades table.
+   * Only triggers for Year 12s during 'Progress Review B'.
+   */
+  _processConditionalUcasTable: function(body, student, reportName) {
+    if (reportName !== CONFIG.REPORTS.PROGRESS_REVIEW.name) return;
+    
+    const isYear12 = String(student.yearGroup).includes('12');
+    const isPRB = String(student.collection).trim() === 'Progress Review B';
+    
+    // Filter to only subjects that have a non-empty UCAS grade
+    const ucasSubjects = student.subjects.filter(subj => subj.ucas && String(subj.ucas).trim() !== '');
+    
+    // Condition is only met if the student is Y12, it's PR B, AND they have at least one valid grade
+    const shouldDisplay = isYear12 && isPRB && ucasSubjects.length > 0;
+    
+    // 1. Locate the UCAS Table
+    const tables = body.getTables();
+    let ucasTable = null;
+    let templateRow = null;
+    let templateRowIndex = -1;
+    
+    for (let t = 0; t < tables.length; t++) {
+      const table = tables[t];
+      for (let r = 0; r < table.getNumRows(); r++) {
+        const row = table.getRow(r);
+        if (row.getText().includes('{{ucasSubjectName}}')) {
+          ucasTable = table;
+          templateRow = row.copy();
+          templateRowIndex = r;
+          break;
+        }
+      }
+      if (ucasTable) break;
+    }
+    
+    // 2. Locate the Heading and preceding Horizontal Rule
+    let headingParagraph = null;
+    let hrToRemove = null;
+    
+    const headingSearch = body.findText('_UcasHeading_');
+    if (headingSearch) {
+      headingParagraph = headingSearch.getElement().getParent();
+      
+      if (headingParagraph && headingParagraph.getType() === DocumentApp.ElementType.PARAGRAPH) {
+        const prevSibling = headingParagraph.getPreviousSibling();
+        if (prevSibling) {
+          if (prevSibling.getType() === DocumentApp.ElementType.HORIZONTAL_RULE) {
+            hrToRemove = prevSibling;
+          } else if (prevSibling.getType() === DocumentApp.ElementType.PARAGRAPH && prevSibling.getNumChildren() > 0) {
+            // Google Docs sometimes embeds the HR inside an empty wrapper paragraph
+            const firstChild = prevSibling.getChild(0);
+            if (firstChild.getType() === DocumentApp.ElementType.HORIZONTAL_RULE) {
+               hrToRemove = prevSibling;
+            }
+          }
+        }
+      }
+    }
+    
+    // 3. Execute Condition
+    if (shouldDisplay) {
+      if (headingParagraph) body.replaceText('_UcasHeading_', 'UCAS predicted grades');
+      
+      if (ucasTable && templateRow) {
+        ucasTable.removeRow(templateRowIndex);
+        ucasSubjects.forEach((subj, index) => {
+          const newRow = templateRow.copy();
+          newRow.replaceText('{{ucasSubjectName}}', subj.subjectName || '');
+          newRow.replaceText('{{ucasGrade}}', subj.ucas || '');
+          ucasTable.insertTableRow(templateRowIndex + index, newRow);
+        });
+      }
+    } else {
+      // Remove everything cleanly from the document
+      if (hrToRemove) hrToRemove.removeFromParent();
+      if (headingParagraph) headingParagraph.removeFromParent();
+      if (ucasTable) ucasTable.removeFromParent();
+      
+      // Fallback cleanup just in case the paragraph removal failed
+      body.replaceText('_UcasHeading_', ''); 
+    }
   },
   
   _injectUcasReferences: function(body, subjects) {
