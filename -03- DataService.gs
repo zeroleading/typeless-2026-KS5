@@ -334,5 +334,68 @@ const DataService = {
         studentMap[adNo].subjects.push(subjectData);
       }
     }
+  },
+
+  /**
+   * Diagnostic test to identify exactly why tutor data is failing to map.
+   * Isolates the 'tutorAssessment' range and analyses its headers.
+   */
+  testTutorDataMapping: function() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const fieldMap = this._getDynamicFieldMap(ss);
+    
+    const targetHeader = (fieldMap['tut_attTpAs'] || '').toLowerCase();
+    const range = ss.getRangeByName('tutorAssessment');
+    
+    if (!range) return "FAIL: The named range 'tutorAssessment' could not be found in this spreadsheet.";
+    
+    const data = range.getDisplayValues();
+    if (data.length < 3) return `FAIL: The 'tutorAssessment' range only has ${data.length} rows. It requires at least 3 (Header, Sub-Header, Data).`;
+    
+    const headers = data[0].map(h => String(h).toLowerCase().trim());
+    const attTpAsIdx = headers.indexOf(targetHeader);
+    const adNoIdx = headers.indexOf((fieldMap['tut_adno'] || '').toLowerCase());
+    
+    let debugMsg = `🔍 TUTOR DATA DIAGNOSTIC\n\n`;
+    debugMsg += `Target Header Expected: '${targetHeader}'\n`;
+    debugMsg += `Header Found at Index: ${attTpAsIdx}\n`;
+    debugMsg += `AdNo Found at Index: ${adNoIdx}\n\n`;
+    
+    if (attTpAsIdx === -1) {
+      debugMsg += `❌ ERROR: Could not find any column matching '${targetHeader}'.\n`;
+      debugMsg += `Here are the headers the script is actually seeing in row 1:\n[ ${headers.join(', ')} ]\n\n`;
+      debugMsg += `Check for typos, trailing spaces, or verify the named range includes the header row.`;
+      return debugMsg;
+    }
+    
+    // Grab the first valid student as a sample
+    let sampleData = "No valid student data rows found.";
+    for (let i = 2; i < data.length; i++) {
+      if (data[i][adNoIdx]) {
+        sampleData = `Sample AdNo: ${data[i][adNoIdx]}\nSample Attendance Value: '${data[i][attTpAsIdx]}'`;
+        break;
+      }
+    }
+    
+    debugMsg += `✅ SUCCESS!\n${sampleData}`;
+    return debugMsg;
   }
 };
+
+// --- DEBUGGING TOOLS ---
+/**
+ * Run this function directly from the Apps Script editor 
+ * to test the Tutor Data mapping and see the diagnostic output.
+ */
+function RUN_TEST_TUTOR_DATA() {
+  const result = DataService.testTutorDataMapping();
+  
+  // Log to console in case it is run without an active spreadsheet window
+  console.log(result);
+  
+  try {
+    SpreadsheetApp.getUi().alert("Tutor Data Debugger", result, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    // Fails silently if run from an isolated editor without the UI bound
+  }
+}
