@@ -123,7 +123,7 @@ const DocumentBuilder = {
       section.replaceText('_Reg_', student.reg || '');
       section.replaceText('_AdNo_', paddedAdNo);
       section.replaceText('_Tutor_', student.tutor || '');
-      section.replaceText('_Date_', Utilities.formatDate(new Date(), "Europe/London", "dd/MM/yyyy"));
+      section.replaceText('_Date_', Utilities.formatDate(new Date(), "Europe/London", "MMMM yyyy"));
       section.replaceText('_YearGroup_', student.yearGroup || '');
       section.replaceText('_Collection_', student.collection || '');
       section.replaceText('_Until_', student.until || '');
