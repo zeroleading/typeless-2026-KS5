@@ -179,7 +179,8 @@ const DataService = {
     const range = ss.getRangeByName('tutorAssessment');
     if (!range) return;
     
-    const data = range.getValues();
+    // Using getDisplayValues() ensures percentages/numbers are pulled exactly as formatted strings
+    const data = range.getDisplayValues();
     if (data.length < 3) return;
     
     const headers = data[0].map(h => String(h).toLowerCase().trim());
