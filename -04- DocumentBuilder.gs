@@ -126,6 +126,7 @@ const DocumentBuilder = {
       section.replaceText('_Date_', Utilities.formatDate(new Date(), "Europe/London", "dd/MM/yyyy"));
       section.replaceText('_YearGroup_', student.yearGroup || '');
       section.replaceText('_Collection_', student.collection || '');
+      section.replaceText('_Until_', student.until || '');
       
       if (student.tutorInfo) {
         section.replaceText('_AttTpAs_', student.tutorInfo.attTpAs || '-');

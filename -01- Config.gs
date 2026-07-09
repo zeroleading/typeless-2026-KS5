@@ -32,6 +32,7 @@ const CONFIG = Object.freeze({
     collection: 'scopeCollection',
     targetSubjectNameRange: 'thisSubjectName',
     shortName: 'scopeShortname',
+    until: 'scopeAttUntil',
     // New dynamic tables on the Control Panel
     fieldMap: 'scopeFieldMap',
     translations: 'scopeTranslations'
