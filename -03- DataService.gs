@@ -390,8 +390,13 @@ const DataService = {
   _processSubjectSheet: function(ss, sheet, studentMap, fieldMap, translations, reportConfig, isYear12, fmStudents) {
     const sheetName = sheet.getName();
     
-    // Year 12 Further Maths Exclusion: FM students are assessed within the main Maths sheet
-    if (isYear12 && sheetName === 'Fm') return;
+    // Year 12 Further Maths Exclusion:
+    // For standard school reports (Progress Reviews / EOY), FM students are assessed within the main Maths sheet.
+    // However, for UCAS reference generation, Further Maths has its own standalone reference narrative and prediction,
+    // so the 'Fm' sheet must NOT be excluded when running UCAS references.
+    if (isYear12 && sheetName === 'Fm' && reportConfig.name !== CONFIG.REPORTS.UCAS_REFERENCE.name) {
+      return;
+    }
     
     const nameRangeStr = `${sheetName}!${CONFIG.SCOPE.targetSubjectNameRange}`;
     const nameRange = ss.getRangeByName(nameRangeStr);
@@ -434,11 +439,13 @@ const DataService = {
       
       const adNo = String(rawAdNo).trim();
       if (studentMap[adNo]) {
-        // Further Maths Rename Logic: Distinguish single Maths from standard cohorts
+        // Further Maths Rename Logic:
+        // Distinguish single Maths from standard cohorts during internal Progress Reviews,
+        // but retain canonical subject naming for both End of Year and UCAS reference reports.
         let finalSubjectName = fullSubjectName;
         if (isYear12 && sheetName === 'Ma' && fmStudents.has(adNo)) {
-          // Keep canonical name for End of Year reporting, rename for Progress Reviews
-          if (reportConfig.name !== CONFIG.REPORTS.EOY_REPORT.name) {
+          if (reportConfig.name !== CONFIG.REPORTS.EOY_REPORT.name &&
+              reportConfig.name !== CONFIG.REPORTS.UCAS_REFERENCE.name) {
             finalSubjectName = 'Mathematics (for Further Maths)';
           }
         }
