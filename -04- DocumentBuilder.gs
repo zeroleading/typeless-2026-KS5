@@ -125,6 +125,62 @@ const DocumentBuilder = {
   },
 
   /**
+   * Generates UCAS reference documents directly from client-cached data payloads.
+   * Completely bypasses sheet reads to optimise speed for on-demand merges of 1-6 students.
+   * Directly saves documents into the configured UCAS destination folder.
+   * @param {Array<Object>} cachedStudents Array of student objects from the client cache.
+   * @return {Object} Summary metadata with folder URL, last document URL, and generated count.
+   */
+  generateUcasDocsFromCache: function(cachedStudents) {
+    const reportConfig = CONFIG.REPORTS.UCAS_REFERENCE;
+    const templateFile = DriveApp.getFileById(reportConfig.templateId);
+    const targetFolderId = reportConfig.outputFolderId || CONFIG.GLOBAL.OUTPUT_FOLDER_ID;
+    const destinationFolder = DriveApp.getFolderById(targetFolderId);
+
+    let lastDocUrl = '';
+    let generatedCount = 0;
+
+    cachedStudents.forEach((student) => {
+      const paddedAdNo = String(student.adNo).padStart(6, '0');
+      // Format the filename strictly to: Name AdNo UCAS 2027
+      const fileName = `${student.name} ${paddedAdNo} UCAS 2027`.trim();
+
+      // Duplicate the template directly into the target folder
+      const newDocFile = templateFile.makeCopy(fileName, destinationFolder);
+      const newDoc = DocumentApp.openById(newDocFile.getId());
+      const body = newDoc.getBody();
+
+      // Inject the three pre-collated UCAS sections directly from the cached payload
+      const tutorText = student.tutorRef && student.tutorRef.trim() !== ''
+        ? student.tutorRef.trim()
+        : 'None declared.';
+      body.replaceText('_Collected Tutor Reference_', tutorText);
+
+      const subjectsText = student.subjectRefs && student.subjectRefs.trim() !== ''
+        ? student.subjectRefs.trim()
+        : 'No subject references recorded.';
+      body.replaceText('_Collected References_', subjectsText);
+
+      const predictionsText = student.predictions && student.predictions.trim() !== ''
+        ? student.predictions.trim()
+        : 'No predicted grades recorded.';
+      body.replaceText('_Collected Predictions_', predictionsText);
+
+      newDoc.saveAndClose();
+
+      lastDocUrl = newDocFile.getUrl();
+      generatedCount++;
+    });
+
+    return {
+      success: true,
+      count: generatedCount,
+      docUrl: generatedCount === 1 ? lastDocUrl : null,
+      folderUrl: destinationFolder.getUrl()
+    };
+  },
+
+  /**
    * Evaluates whether a subject record satisfies completeness criteria for a given report.
    * @private
    * @param {Object} subj The subject assessment object.

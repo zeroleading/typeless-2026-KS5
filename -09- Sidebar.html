@@ -269,242 +269,8 @@
       };
 
       /**
-       * Stage 1: Fetches the lightweight student directory immediately.
-       */
-      function loadStudentDirectory(callback) {
-        google.script.run
-          .withSuccessHandler(function(students) {
-            allStudents = students;
-            renderList(allStudents);
-            if (callback) callback();
-          })
-          .withFailureHandler(function() {
-            document.getElementById('studentListContainer').innerHTML = 
-              '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load cohort.</span>';
-          })
-          .sidebarGetStudentList();
-      }
-
-      /**
-       * Stage 2: Preloads complete reference payloads into browser memory.
-       */
-      function preloadCohortData() {
-        setSyncStatus('Synchronising references in background...', 'loading');
-        isPreloadingCache = true;
-
-        google.script.run
-          .withSuccessHandler(function(cache) {
-            isPreloadingCache = false;
-            if (cache && !cache.error) {
-              cohortCache = cache;
-              setSyncStatus('References synchronised in memory', 'active');
-              renderList(allStudents); // Re-render to show completeness badges
-            } else {
-              setSyncStatus('Background sync encountered an issue', '');
-            }
-          })
-          .withFailureHandler(function() {
-            isPreloadingCache = false;
-            setSyncStatus('Sync paused. Previews will fetch on-demand.', '');
-          })
-          .sidebarGetCohortUcasData();
-      }
-
-      /**
-       * Refreshes both the directory and in-memory cache on demand.
-       */
-      function refreshAllData() {
-        const btn = document.getElementById('refreshBtn');
-        btn.disabled = true;
-        btn.innerHTML = '&#x21bb; Syncing...';
-        cohortCache = null;
-
-        loadStudentDirectory(function() {
-          preloadCohortData();
-          btn.disabled = false;
-          btn.innerHTML = '&#x21bb; Refresh Data';
-        });
-      }
-
-      /**
-       * Updates the subtle synchronisation indicator pill.
-       */
-      function setSyncStatus(text, stateClass) {
-        const dot = document.getElementById('syncDot');
-        const label = document.getElementById('syncStatus');
-        dot.className = 'sync-dot' + (stateClass ? ' ' + stateClass : '');
-        label.innerText = text;
-      }
-
-      /**
-       * Renders student rows.
-       * Space-saving rule: Progress summaries and tooltips are strictly restricted
-       * to incomplete students, leaving complete entries clean and uncluttered.
-       */
-      function renderList(students) {
-        const container = document.getElementById('studentListContainer');
-        if (!students || students.length === 0) {
-          container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No matching students found.</span>';
-          return;
-        }
-        
-        let html = '';
-        students.forEach(function(s) {
-          const adNoKey = String(s.adNo);
-          const cached = cohortCache ? cohortCache[adNoKey] : null;
-          
-          const earlyAppClass = s.earlyApp ? ' early-app' : '';
-          let badges = '';
-          
-          if (s.earlyApp) {
-            badges += '<span class="badge badge-early">Early</span>';
-          }
-          
-          // Render the Incomplete tag and progress count pill ONLY when items are missing
-          if (cached && !cached.isComplete) {
-            badges += '<span class="badge badge-incomplete" title="Missing: ' + (cached.missingSummary || 'Incomplete') + '">Incomplete</span>';
-            if (cached.progressSummary) {
-              badges += '<span class="badge-progress" title="Missing: ' + cached.missingSummary + '">' + cached.progressSummary + '</span>';
-            }
-          }
-
-          html += '<label class="student-item' + earlyAppClass + '">' +
-                  '<input type="checkbox" class="student-checkbox" value="' + s.adNo + '">' +
-                  '<span>' + s.name + ' (' + s.reg + ')</span>' + badges +
-                  '</label>';
-        });
-        container.innerHTML = html;
-      }
-
-      /**
-       * Filters student list dynamically by query text, early-app, and completeness.
-       */
-      function filterList() {
-        const term = document.getElementById('searchInput').value.toLowerCase();
-        const showOnlyEarlyApps = document.getElementById('earlyAppFilter').checked;
-        const showOnlyIncomplete = document.getElementById('incompleteFilter').checked;
-        
-        const filtered = allStudents.filter(function(s) {
-          const matchesText = s.name.toLowerCase().includes(term) || s.reg.toLowerCase().includes(term);
-          const matchesEarlyApp = showOnlyEarlyApps ? s.earlyApp === true : true;
-          
-          let matchesIncomplete = true;
-          if (showOnlyIncomplete) {
-            const cached = cohortCache ? cohortCache[String(s.adNo)] : null;
-            matchesIncomplete = cached ? !cached.isComplete : true;
-          }
-          
-          return matchesText && matchesEarlyApp && matchesIncomplete;
-        });
-        renderList(filtered);
-      }
-
-      /**
-       * Harvests checked admission numbers exclusively from the student list container.
-       * Decoupled from filter controls to prevent accidental "on" selections.
-       */
-      function getSelectedAdnos() {
-        const container = document.getElementById('studentListContainer');
-        const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
-        return Array.from(checkboxes).map(function(cb) { return cb.value; });
-      }
-
-      /**
-       * Updates the status container with loading messages or feedback.
-       */
-      function setStatus(msg, isLoading) {
-        const indicator = document.getElementById('statusIndicator');
-        const output = document.getElementById('outputArea');
-        
-        if (isLoading) {
-          indicator.style.display = 'block';
-          indicator.innerHTML = '<span class="processing-text"><div class="spinner"></div> ' + msg + '</span>';
-        } else {
-          indicator.style.display = 'none';
-          if (msg) output.innerHTML = msg;
-        }
-      }
-
-      /**
-       * Displays Section 2, 3, and 4 cards, resolving from memory instantaneously.
-       */
-      function getPreview() {
-        const selected = getSelectedAdnos();
-        if (selected.length === 0) {
-          setStatus('<span style="color:#e53e3e;">Please select a student to preview.</span>', false);
-          return;
-        }
-        if (selected.length > 1) {
-          setStatus('<span style="color:#e53e3e;">Section preview is only available for a single student. Please uncheck extras.</span>', false);
-          return;
-        }
-
-        const targetAdNo = selected[0];
-
-        // 1. Instant resolution from browser memory if background cache is ready
-        if (cohortCache && cohortCache[String(targetAdNo)]) {
-          renderSectionalPreview(cohortCache[String(targetAdNo)]);
-          return;
-        }
-
-        // 2. Graceful fallback if background synchronisation is still in progress
-        setStatus(isPreloadingCache ? 'Finalising cohort collation in memory...' : 'Collating sections...', true);
-        
-        google.script.run
-          .withSuccessHandler(function(result) {
-            setStatus('', false);
-            if (result.error) {
-              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + result.error + '</span>';
-              return;
-            }
-            renderSectionalPreview(result);
-          })
-          .withFailureHandler(function(err) {
-            setStatus('<span style="color:#e53e3e;">Error: ' + err.message + '</span>', false);
-          })
-          .sidebarGetUcasPreview(targetAdNo);
-      }
-
-      /**
-       * Helper rendering structured preview cards into the output container.
-       * For complete records, the status breakdown is omitted to maximise review space.
-       */
-      function renderSectionalPreview(data) {
-        let metaLine = '';
-        if (data.isComplete === false) {
-          if (data.progressSummary) {
-            metaLine += '<div style="font-size: 0.8em; color: #4a5568; margin-top: 3px;"><strong>Status:</strong> ' + data.progressSummary + '</div>';
-          }
-          if (data.missingSummary) {
-            metaLine += '<div style="font-size: 0.78em; color: #dd6b20; margin-top: 2px;"><strong>Missing:</strong> ' + data.missingSummary + '</div>';
-          }
-        }
-
-        const headerHtml = '<strong style="font-size: 1.05em; color: #1a202c;">' + data.name + ' (' + data.reg + ')</strong>' + metaLine + '<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0 12px 0;">';
-        
-        // Section 2: Tutor extenuating circumstances card
-        const tutorCard = '<div class="preview-card">' +
-                          '<div class="preview-title">Section 2: Extenuating Circumstances (Tutor)</div>' +
-                          '<div class="preview-body">' + (data.tutorRef || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                          '</div>';
-
-        // Section 3: Subject suitability narrative card
-        const subjectCard = '<div class="preview-card">' +
-                            '<div class="preview-title">Section 3: Course Suitability (Subjects)</div>' +
-                            '<div class="preview-body">' + (data.subjectRefs || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                            '</div>';
-
-        // Section 4: Predicted grades summary card
-        const predCard = '<div class="preview-card">' +
-                         '<div class="preview-title">Section 4: Predicted Grades</div>' +
-                         '<div class="preview-body">' + (data.predictions || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                         '</div>';
-
-        document.getElementById('outputArea').innerHTML = headerHtml + tutorCard + subjectCard + predCard;
-      }
-
-      /**
-       * Executes on-demand document generation for the selected admission numbers.
+       * Executes on-demand document generation for the selected admission numbers
+       * leveraging the client-side cache directly to avoid redundant spreadsheet reads.
        */
       function runMerge() {
         const selected = getSelectedAdnos();
@@ -513,7 +279,23 @@
           return;
         }
 
-        setStatus('Merging references to Google Docs...', true);
+        // Verify that the in-memory cache has synchronised
+        if (!cohortCache) {
+          setStatus('<span style="color:#e53e3e;">Data cache is still synchronising. Please wait a moment or click Refresh Data.</span>', false);
+          return;
+        }
+
+        // Harvest the pre-collated payloads directly from browser memory
+        const cachedPayloads = selected
+          .map(function(adNo) { return cohortCache[String(adNo)]; })
+          .filter(Boolean);
+
+        if (cachedPayloads.length === 0) {
+          setStatus('<span style="color:#e53e3e;">Could not locate cached data for the selected students. Please refresh data.</span>', false);
+          return;
+        }
+
+        setStatus('Merging references from memory to Google Docs...', true);
         
         google.script.run
           .withSuccessHandler(function(res) {
@@ -540,7 +322,7 @@
           .withFailureHandler(function(err) {
             setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
           })
-          .sidebarRunUcasMerge(selected.join(','));
+          .sidebarRunUcasMergeFromCache(cachedPayloads);
       }
     </script>
   </body>

@@ -238,6 +238,27 @@ function sidebarGetUcasPreview(adno) {
 }
 
 /**
+ * Executes an on-demand merge using student reference payloads supplied directly
+ * from browser memory (client cache). Bypasses sheet re-reading for maximum performance.
+ * @param {Array<Object>} cachedStudentPayloads Array of student data objects from the sidebar.
+ * @return {Object} Operation summary containing document URL, folder URL, and count.
+ */
+function sidebarRunUcasMergeFromCache(cachedStudentPayloads) {
+  try {
+    if (!Array.isArray(cachedStudentPayloads) || cachedStudentPayloads.length === 0) {
+      return { error: "No student records provided for merge." };
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    ss.toast(`Generating references for ${cachedStudentPayloads.length} student(s)...`, 'UCAS Engine');
+
+    return DocumentBuilder.generateUcasDocsFromCache(cachedStudentPayloads);
+  } catch (e) {
+    return { error: "System Error: " + e.message };
+  }
+}
+
+/**
  * Executes an on-demand merge for one or more selected students.
  * Returns direct document links when processing an individual student,
  * or folder links when handling a small group of early applicants.
