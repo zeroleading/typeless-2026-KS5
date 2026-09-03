@@ -269,6 +269,259 @@
       };
 
       /**
+       * Loads the lightweight master student list to enable instant UI interactions.
+       * @param {Function} [onComplete] Optional callback executed upon directory load.
+       */
+      function loadStudentDirectory(onComplete) {
+        const dot = document.getElementById('syncDot');
+        const status = document.getElementById('syncStatus');
+        
+        dot.className = 'sync-dot loading';
+        status.innerText = 'Loading student directory...';
+
+        google.script.run
+          .withSuccessHandler(function(students) {
+            allStudents = students;
+            renderList(allStudents);
+            dot.className = 'sync-dot';
+            status.innerText = 'Directory loaded. Synchronising references...';
+            if (onComplete) onComplete();
+          })
+          .withFailureHandler(function(err) {
+            document.getElementById('studentListContainer').innerHTML = 
+              '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load cohort directory: ' + err.message + '</span>';
+            dot.className = 'sync-dot';
+            status.innerText = 'Error loading directory.';
+          })
+          .sidebarGetStudentList();
+      }
+
+      /**
+       * Preloads full UCAS reference text and completeness data into client memory.
+       */
+      function preloadCohortData() {
+        if (isPreloadingCache) return;
+        isPreloadingCache = true;
+
+        const dot = document.getElementById('syncDot');
+        const status = document.getElementById('syncStatus');
+
+        dot.className = 'sync-dot loading';
+        status.innerText = 'Synchronising references in background...';
+
+        google.script.run
+          .withSuccessHandler(function(cacheData) {
+            isPreloadingCache = false;
+            if (cacheData && cacheData.error) {
+              dot.className = 'sync-dot';
+              status.innerText = 'Sync error: ' + cacheData.error;
+              return;
+            }
+
+            cohortCache = cacheData;
+            dot.className = 'sync-dot active';
+            status.innerText = 'Cohort synchronized';
+            
+            // Re-render list to reflect completeness badges and progress counters
+            filterList();
+          })
+          .withFailureHandler(function(err) {
+            isPreloadingCache = false;
+            dot.className = 'sync-dot';
+            status.innerText = 'Sync failed: ' + err.message;
+          })
+          .sidebarGetCohortUcasData();
+      }
+
+      /**
+       * Manually forces a refresh of both directory and reference caches from the spreadsheet.
+       */
+      function refreshAllData() {
+        cohortCache = null;
+        document.getElementById('refreshBtn').disabled = true;
+        document.getElementById('studentListContainer').innerHTML = 
+          '<span class="processing-text" style="padding: 8px;"><div class="spinner"></div> Re-synchronising...</span>';
+        
+        loadStudentDirectory(function() {
+          document.getElementById('refreshBtn').disabled = false;
+          preloadCohortData();
+        });
+      }
+
+      /**
+       * Renders the interactive student list with badges.
+       * Progress metrics and incomplete badges are displayed only for incomplete records.
+       * @param {Array<Object>} students Array of student descriptors.
+       */
+      function renderList(students) {
+        const container = document.getElementById('studentListContainer');
+        if (!students || students.length === 0) {
+          container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No matching students found.</span>';
+          return;
+        }
+        
+        let html = '';
+        students.forEach(function(s) {
+          const earlyAppClass = s.earlyApp ? ' early-app' : '';
+          const earlyBadge = s.earlyApp ? '<span class="badge badge-early">Early</span>' : '';
+          
+          let statusBadges = '';
+          const cached = cohortCache ? cohortCache[String(s.adNo)] : null;
+          
+          // Only show Incomplete badge and progress details if the application is incomplete
+          if (cached && !cached.isComplete) {
+            const tooltip = cached.missingSummary ? ' title="Missing: ' + cached.missingSummary + '"' : '';
+            statusBadges = '<span class="badge badge-incomplete"' + tooltip + '>Incomplete</span>' +
+                           '<span class="badge-progress">' + (cached.progressSummary || '') + '</span>';
+          }
+
+          const regText = s.reg ? ' <span style="color:#718096; font-size: 0.9em;">(' + s.reg + ')</span>' : '';
+
+          html += '<label class="student-item' + earlyAppClass + '">' +
+                  '<input type="checkbox" class="student-checkbox" value="' + s.adNo + '">' +
+                  '<span>' + s.name + regText + earlyBadge + statusBadges + '</span>' +
+                  '</label>';
+        });
+        container.innerHTML = html;
+      }
+
+      /**
+       * Filters the student list based on search term, early app toggle, and incomplete toggle.
+       */
+      function filterList() {
+        const term = document.getElementById('searchInput').value.toLowerCase().trim();
+        const showOnlyEarly = document.getElementById('earlyAppFilter').checked;
+        const showOnlyIncomplete = document.getElementById('incompleteFilter').checked;
+        
+        const filtered = allStudents.filter(function(s) {
+          const nameMatches = s.name.toLowerCase().includes(term);
+          const regMatches = s.reg ? s.reg.toLowerCase().includes(term) : false;
+          const matchesText = term === '' || nameMatches || regMatches;
+
+          const matchesEarly = showOnlyEarly ? s.earlyApp === true : true;
+          
+          let matchesIncomplete = true;
+          if (showOnlyIncomplete) {
+            if (cohortCache && cohortCache[String(s.adNo)]) {
+              matchesIncomplete = !cohortCache[String(s.adNo)].isComplete;
+            } else {
+              matchesIncomplete = true; // Retain during initial sync
+            }
+          }
+
+          return matchesText && matchesEarly && matchesIncomplete;
+        });
+
+        renderList(filtered);
+      }
+
+      /**
+       * Extracts selected admission numbers strictly from the student list container.
+       * @return {Array<string>} Array of selected admission numbers.
+       */
+      function getSelectedAdnos() {
+        const checkboxes = document.querySelectorAll('#studentListContainer input[type="checkbox"]:checked');
+        return Array.from(checkboxes).map(function(cb) { return cb.value; });
+      }
+
+      /**
+       * Controls display of the status loader.
+       */
+      function setStatus(msg, isLoading) {
+        const indicator = document.getElementById('statusIndicator');
+        const output = document.getElementById('outputArea');
+        
+        if (isLoading) {
+          indicator.style.display = 'block';
+          indicator.innerHTML = '<span class="processing-text"><div class="spinner"></div> ' + msg + '</span>';
+          output.innerHTML = '';
+        } else {
+          indicator.style.display = 'none';
+          if (msg) output.innerHTML = msg;
+        }
+      }
+
+      /**
+       * Fetches and presents sectional previews. Utilises client cache when available for instant rendering.
+       */
+      function getPreview() {
+        const selected = getSelectedAdnos();
+        if (selected.length === 0) {
+          setStatus('<span style="color:#e53e3e;">Please select a student to preview.</span>', false);
+          return;
+        }
+        if (selected.length > 1) {
+          setStatus('<span style="color:#e53e3e;">Sectional preview is available for one student at a time. Please select only one.</span>', false);
+          return;
+        }
+
+        const targetAdNo = selected[0];
+
+        // 1. Instant rendering from browser cache if preloading has completed
+        if (cohortCache && cohortCache[String(targetAdNo)]) {
+          renderSectionalPreview(cohortCache[String(targetAdNo)]);
+          return;
+        }
+
+        // 2. Fallback to server RPC if cache is still synchronising
+        setStatus('Fetching sectional references from sheets...', true);
+        google.script.run
+          .withSuccessHandler(function(result) {
+            setStatus('', false);
+            if (result.error) {
+              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + result.error + '</span>';
+            } else {
+              renderSectionalPreview(result);
+            }
+          })
+          .withFailureHandler(function(err) {
+            setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
+          })
+          .sidebarGetUcasPreview(targetAdNo);
+      }
+
+      /**
+       * Formats and renders the structured sectional preview cards.
+       * @param {Object} data Student preview descriptor.
+       */
+      function renderSectionalPreview(data) {
+        const regInfo = data.reg ? ' (' + data.reg + ')' : '';
+        let missingNotice = '';
+        
+        // Show missing summary banner only if the applicant is incomplete
+        if (data.isComplete === false && data.missingSummary) {
+          missingNotice = '<div style="background:#fffaf0; border:1px solid #feebc8; color:#c05621; padding:6px 8px; border-radius:4px; margin-top:6px; font-size:0.85em;">' +
+                          '<strong>Missing:</strong> ' + data.missingSummary + ' (' + (data.progressSummary || '') + ')' +
+                          '</div>';
+        }
+
+        let html = '<div style="margin-bottom: 12px;">' +
+                   '<strong style="color: #2d3748; font-size: 1.15em;">' + data.name + regInfo + '</strong>' +
+                   missingNotice +
+                   '</div>';
+
+        // Section 2: Tutor Extenuating Circumstances
+        html += '<div class="preview-card">' +
+                '<div class="preview-title">Extenuating Circumstances (Tutor Reference)</div>' +
+                '<div class="preview-body">' + (data.tutorRef || '<em>None declared.</em>') + '</div>' +
+                '</div>';
+
+        // Section 3: Subject References
+        html += '<div class="preview-card">' +
+                '<div class="preview-title">Suitability For Course (Subject References)</div>' +
+                '<div class="preview-body">' + (data.subjectRefs || '<em>No subject references recorded.</em>') + '</div>' +
+                '</div>';
+
+        // Section 4: Plain-text Predictions
+        html += '<div class="preview-card">' +
+                '<div class="preview-title">Predicted Grades</div>' +
+                '<div class="preview-body">' + (data.predictions || '<em>No predicted grades recorded.</em>') + '</div>' +
+                '</div>';
+
+        document.getElementById('outputArea').innerHTML = html;
+      }
+
+      /**
        * Executes on-demand document generation for the selected admission numbers
        * leveraging the client-side cache directly to avoid redundant spreadsheet reads.
        */
