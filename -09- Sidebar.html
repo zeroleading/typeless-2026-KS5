@@ -101,13 +101,13 @@
       .badge-early { background-color: #ebf8ff; color: #0081af; }
       .badge-incomplete { background-color: #fffaf0; color: #dd6b20; }
       .badge-progress {
-        background-color: #f0fdf4;
-        color: #166534;
+        background-color: #f8fafc;
+        color: #64748b;
         font-size: 0.72em;
         margin-left: auto;
         padding: 1px 6px;
         border-radius: 4px;
-        border: 1px solid #bbf7d0;
+        border: 1px solid #e2e8f0;
         white-space: nowrap;
       }
       
@@ -327,7 +327,7 @@
       }
 
       /**
-       * Updates the subtle synchronization indicator pill.
+       * Updates the subtle synchronisation indicator pill.
        */
       function setSyncStatus(text, stateClass) {
         const dot = document.getElementById('syncDot');
@@ -337,7 +337,9 @@
       }
 
       /**
-       * Renders student rows with early applicant and completeness indicators.
+       * Renders student rows.
+       * Space-saving rule: Progress summaries and tooltips are strictly restricted
+       * to incomplete students, leaving complete entries clean and uncluttered.
        */
       function renderList(students) {
         const container = document.getElementById('studentListContainer');
@@ -357,12 +359,12 @@
           if (s.earlyApp) {
             badges += '<span class="badge badge-early">Early</span>';
           }
-          if (cached) {
-            if (!cached.isComplete) {
-              badges += '<span class="badge badge-incomplete" title="Missing: ' + (cached.missingSummary || 'Incomplete') + '">Incomplete</span>';
-            }
+          
+          // Render the Incomplete tag and progress count pill ONLY when items are missing
+          if (cached && !cached.isComplete) {
+            badges += '<span class="badge badge-incomplete" title="Missing: ' + (cached.missingSummary || 'Incomplete') + '">Incomplete</span>';
             if (cached.progressSummary) {
-              badges += '<span class="badge-progress" title="Progress: ' + cached.progressSummary + '">' + cached.progressSummary + '</span>';
+              badges += '<span class="badge-progress" title="Missing: ' + cached.missingSummary + '">' + cached.progressSummary + '</span>';
             }
           }
 
@@ -399,7 +401,7 @@
 
       /**
        * Harvests checked admission numbers exclusively from the student list container.
-       * Fixes the previous bug where auxiliary filter toggles were erroneously included.
+       * Decoupled from filter controls to prevent accidental "on" selections.
        */
       function getSelectedAdnos() {
         const container = document.getElementById('studentListContainer');
@@ -445,7 +447,7 @@
           return;
         }
 
-        // 2. Graceful fallback if background synchronization is still in progress
+        // 2. Graceful fallback if background synchronisation is still in progress
         setStatus(isPreloadingCache ? 'Finalising cohort collation in memory...' : 'Collating sections...', true);
         
         google.script.run
@@ -465,14 +467,17 @@
 
       /**
        * Helper rendering structured preview cards into the output container.
+       * For complete records, the status breakdown is omitted to maximise review space.
        */
       function renderSectionalPreview(data) {
         let metaLine = '';
-        if (data.progressSummary) {
-          metaLine = '<div style="font-size: 0.8em; color: #4a5568; margin-top: 3px;"><strong>Status:</strong> ' + data.progressSummary + '</div>';
-        }
-        if (data.missingSummary) {
-          metaLine += '<div style="font-size: 0.78em; color: #dd6b20; margin-top: 2px;"><strong>Missing:</strong> ' + data.missingSummary + '</div>';
+        if (data.isComplete === false) {
+          if (data.progressSummary) {
+            metaLine += '<div style="font-size: 0.8em; color: #4a5568; margin-top: 3px;"><strong>Status:</strong> ' + data.progressSummary + '</div>';
+          }
+          if (data.missingSummary) {
+            metaLine += '<div style="font-size: 0.78em; color: #dd6b20; margin-top: 2px;"><strong>Missing:</strong> ' + data.missingSummary + '</div>';
+          }
         }
 
         const headerHtml = '<strong style="font-size: 1.05em; color: #1a202c;">' + data.name + ' (' + data.reg + ')</strong>' + metaLine + '<hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0 12px 0;">';
