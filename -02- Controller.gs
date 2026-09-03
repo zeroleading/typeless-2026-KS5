@@ -1,24 +1,40 @@
-/** * Controller.gs 
- * Handles the user interface, custom menus, and authorisation routing. 
+/**
+ * @fileoverview Controller.gs
+ * Handles user interface lifecycles, dynamic menu rendering based on user roles,
+ * modal dialog triggers, and RPC endpoints for the UCAS sidebar.
+ */
+
+/**
+ * Standard trigger executed whenever the spreadsheet is opened.
+ * Builds role-tailored menus based on the active user's email address.
+ * @param {Object} e The open event object.
  */
 function onOpen(e) {
   buildDynamicMenu();
 }
 
+/**
+ * Constructs the custom Google Sheets menu.
+ * Enforces role-based security by verifying the user's email against super-user
+ * and report-specific permissions before displaying administrative actions.
+ */
 function buildDynamicMenu() {
   const ui = SpreadsheetApp.getUi();
   const email = Session.getActiveUser().getEmail();
   const menu = ui.createMenu('Typeless Reports');
   
+  // If the script runs in an unauthenticated or limited context, prompt for initial authorisation.
   if (!email) {
     menu.addItem('Authorise Script', 'authoriseScript').addToUi();
     return;
   }
   
   const isSuperUser = CONFIG.AUTH.SUPER_USERS.includes(email);
+  const isUcasUser = CONFIG.AUTH.REPORT_SPECIFIC.UCAS.includes(email);
   let menuHasItems = false;
   
   if (isSuperUser) {
+    // Administrative tools restricted to Super Users
     menu.addItem('Setup Subject Sheets', 'triggerSetup');
     menu.addItem('Freeze Import Data', 'triggerFreeze');
     menu.addItem('Thaw Import Data', 'triggerThaw');
@@ -29,6 +45,10 @@ function buildDynamicMenu() {
     menu.addSeparator();
     menu.addItem('Run UCAS Collection (Sidebar)', 'showUcasSidebar');
     menuHasItems = true;
+  } else if (isUcasUser) {
+    // Tailored view for UCAS advisers to prevent accidental changes to global data
+    menu.addItem('Run UCAS Collection (Sidebar)', 'showUcasSidebar');
+    menuHasItems = true;
   }
   
   if (menuHasItems) {
@@ -36,12 +56,20 @@ function buildDynamicMenu() {
   }
 }
 
+/**
+ * Feedback handler called when an unauthenticated user triggers initial permission grants.
+ */
 function authoriseScript() {
   SpreadsheetApp.getUi().alert('Authorisation complete. Please refresh the page to see your custom menu.');
 }
 
+/** Triggers subject sheet initialisation via Setup.gs */
 function triggerSetup() { Setup.triggerCreateSubjectSheets(); }
+
+/** Freezes dynamic formulas on the import sheet to preserve calculation state */
 function triggerFreeze() { Setup.freezeImportSheet(); }
+
+/** Restores dynamic formulas on the import sheet for MIS data refresh */
 function triggerThaw() { Setup.thawImportSheet(); }
 
 // --- KS5 REPORT TRIGGERS ---
@@ -50,21 +78,29 @@ function triggerNextStepsSummary() { showBatchModal('NEXT_STEPS_SUMMARY', 'Next 
 function triggerEoyReport() { showBatchModal('EOY_REPORT', 'End of Year Reports'); }
 
 /**
- * Opens the new Chunking Modal for heavy report generation.
+ * Opens the chunking modal dialog for heavy batch generation tasks.
+ * Validates that import data is frozen beforehand to avoid reading unstable formulas.
+ * @param {string} configKey Key corresponding to CONFIG.REPORTS.
+ * @param {string} friendlyName Human-readable report title for the UI.
  */
 function showBatchModal(configKey, friendlyName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const importSheet = ss.getSheetByName('import');
   
+  // Ensure data stability: live MIS calculations must be flattened prior to generating documents.
   if (importSheet) {
     const status = importSheet.getRange('A1').getValue();
     if (status !== '🥶') {
-      SpreadsheetApp.getUi().alert('Validation Error', 'The import sheet must be frozen (🥶) before generating reports.', SpreadsheetApp.getUi().ButtonSet.OK);
+      SpreadsheetApp.getUi().alert(
+        'Validation Error', 
+        'The import sheet must be frozen (🥶) before generating reports.', 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
       return;
     }
   }
 
-  // Use HtmlTemplate to pass variables to the HTML file
+  // Evaluate the HTML template with injected contextual properties
   const template = HtmlService.createTemplateFromFile('-10- BatchGeneration');
   template.configKey = configKey;
   template.friendlyName = friendlyName;
@@ -78,7 +114,11 @@ function showBatchModal(configKey, friendlyName) {
 }
 
 /**
- * Called by the Modal (Step 1): Prepares the folder and audits the data.
+ * Server-side initialisation for modal chunked processing.
+ * Conducts a pre-flight data audit and constructs the target Drive folder.
+ * @param {string} configKey Report configuration identifier.
+ * @param {string|boolean} auditMode 'ignore', 'drop', or false if pre-flight audit check.
+ * @return {Object} Status payload containing issues or folder details.
  */
 function server_initBatch(configKey, auditMode) {
   const reportConfig = CONFIG.REPORTS[configKey];
@@ -86,7 +126,7 @@ function server_initBatch(configKey, auditMode) {
 
   if (payload.length === 0) return { error: "No student data found." };
 
-  // 1. Audit Check
+  // Conduct the audit check only if the user has not yet acknowledged missing data
   if (!auditMode) {
     const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
     if (studentsWithIssues.length > 0) {
@@ -99,7 +139,7 @@ function server_initBatch(configKey, auditMode) {
     }
   }
 
-  // 2. Folder Creation
+  // Create batch folder once audit is resolved or bypassed
   const folderId = DocumentBuilder.createBatchFolder(reportConfig, payload[0]);
   
   return {
@@ -111,38 +151,45 @@ function server_initBatch(configKey, auditMode) {
 }
 
 /**
- * Called by the Modal (Step 3 Loop): Processes a specific chunk of students.
+ * Server-side chunk execution called cyclically by the modal dialog.
+ * Slices student data into manageable chunks to stay well beneath GAS timeout limits.
+ * @param {string} configKey Report configuration key.
+ * @param {string} folderId Destination folder ID.
+ * @param {number} startIndex Zero-based start index of the chunk.
+ * @param {number} chunkSize Number of students to process.
+ * @param {string} auditMode Audit flag ('ignore' or 'drop').
+ * @return {Object} Simple success confirmation.
  */
 function server_processChunk(configKey, folderId, startIndex, chunkSize, auditMode) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const reportConfig = CONFIG.REPORTS[configKey];
   
-  // Re-build payload dynamically (fast and keeps memory lean)
+  // Re-build student payload dynamically in memory to maintain lean execution state
   const payload = DataService.buildStudentDataPayload(reportConfig);
-  
-  // Slice out just the 10 students requested
   const chunk = payload.slice(startIndex, startIndex + chunkSize);
 
   ss.toast(`Merging chunk: ${startIndex + 1} to ${startIndex + chunk.length}...`, 'Background Engine');
   
-  // Send to builder
+  // Delegate document creation to the builder module
   DocumentBuilder.generateChunk(reportConfig, chunk, folderId, auditMode);
   
   return { success: true };
 }
 
 /**
- * Opens the HTML sidebar for UCAS Reference operations.
+ * Opens the dedicated HTML sidebar for on-demand UCAS Reference collation.
  */
 function showUcasSidebar() {
   const html = HtmlService.createHtmlOutputFromFile('-09- Sidebar')
       .setTitle('UCAS References')
-      .setWidth(300);
+      .setWidth(360);
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
 /**
- * Called by the Sidebar on load to populate the searchable student list.
+ * Fetches the master student directory to populate the searchable list in the sidebar.
+ * Sorts students alphabetically by surname/forename for quick lookup.
+ * @return {Array<Object>} Lightweight student descriptor objects.
  */
 function sidebarGetStudentList() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -155,12 +202,17 @@ function sidebarGetStudentList() {
     earlyApp: s.earlyApp
   }));
   
+  // Alphabetical sort ensures consistent navigation in the client-side list
   list.sort((a, b) => a.name.localeCompare(b.name));
   return list;
 }
 
 /**
- * Called by the Sidebar to fetch a plain-text preview of the references.
+ * Fetches structured, multi-section preview data for a single student.
+ * Enables the coordinator to review Section 2 (Tutor), Section 3 (Subjects),
+ * and Section 4 (Predictions) prior to running a merge.
+ * @param {string|number} adno The admission number of the selected student.
+ * @return {Object} Structured preview payload or an error descriptor.
  */
 function sidebarGetUcasPreview(adno) {
   try {
@@ -173,38 +225,47 @@ function sidebarGetUcasPreview(adno) {
 }
 
 /**
- * Called by the Sidebar to run a specific merge for requested Admission Numbers.
+ * Executes an on-demand merge for one or more selected students.
+ * Returns direct document links when processing an individual student,
+ * or folder links when handling a small group of early applicants.
+ * @param {string} adnoString Comma-separated list of target admission numbers.
+ * @return {Object} Operation summary containing document/folder links and count.
  */
 function sidebarRunUcasMerge(adnoString) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const adnos = adnoString.split(',').map(s => s.trim()).filter(s => s);
+    // Sanitise and strip empty entries from the comma-separated parameter
+    const adnos = adnoString.split(',').map(s => s.trim()).filter(Boolean);
     
     let payload = DataService.buildStudentDataPayload(CONFIG.REPORTS.UCAS_REFERENCE);
     
+    // Filter the full cohort down to the requested admission numbers
     payload = payload.filter(s => 
       adnos.includes(String(s.adNo)) || adnos.includes(String(s.adNo).padStart(6, '0'))
     );
     
-    if (payload.length === 0) return "Error: No matching students found.";
-    
-    const studentsWithIssues = payload.filter(s => s.auditIssues && s.auditIssues.length > 0);
-    if (studentsWithIssues.length > 0) {
-      const names = studentsWithIssues.map(s => s.name).join(', ');
-      return `Error: Missing UCAS data detected for ${names}. Please resolve on the subject sheets before merging.`;
-    }
+    if (payload.length === 0) return { error: "No matching students found." };
     
     ss.toast(`Generating UCAS references for ${payload.length} student(s)...`, 'Typeless');
-    const folderId = DocumentBuilder.generateBatch(CONFIG.REPORTS.UCAS_REFERENCE, payload);
+    const result = DocumentBuilder.generateBatch(CONFIG.REPORTS.UCAS_REFERENCE, payload);
     
-    return `https://drive.google.com/drive/folders/${folderId}`;
+    return {
+      success: true,
+      count: payload.length,
+      folderUrl: result.folderUrl,
+      docUrl: payload.length === 1 ? result.lastDocUrl : null
+    };
   } catch (e) {
-    return "System Error: " + e.message;
+    return { error: "System Error: " + e.message };
   }
 }
 
-/** * Shared execution logic for all report types. 
- * @private 
+/**
+ * Shared execution logic for modal-less standard batch runs.
+ * Retained for backwards compatibility with non-chunked workflows.
+ * @private
+ * @param {Object} reportConfig Target report configuration object.
+ * @param {string} reportFriendlyName Human-readable name for toasts and prompts.
  */
 function _runReportBatch(reportConfig, reportFriendlyName) {
   const ui = SpreadsheetApp.getUi();
@@ -219,7 +280,11 @@ function _runReportBatch(reportConfig, reportFriendlyName) {
     }
   }
   
-  const batchPrompt = ui.prompt('Batch Run', `Generate ${reportFriendlyName}?\n\nEnter a number to run a test batch, or leave blank to run the whole cohort:`, ui.ButtonSet.OK_CANCEL);
+  const batchPrompt = ui.prompt(
+    'Batch Run', 
+    `Generate ${reportFriendlyName}?\n\nEnter a number to run a test batch, or leave blank to run the whole cohort:`, 
+    ui.ButtonSet.OK_CANCEL
+  );
   
   if (batchPrompt.getSelectedButton() !== ui.Button.OK) {
     return;
@@ -255,6 +320,6 @@ function _runReportBatch(reportConfig, reportFriendlyName) {
   }
   
   ss.toast(`Generating documents for ${payload.length} students...`, 'Typeless');
-  const folderId = DocumentBuilder.generateBatch(reportConfig, payload);
-  ui.alert('Merge Complete', `Documents generated successfully.\nFolder ID: ${folderId}`, ui.ButtonSet.OK);
+  const batchResult = DocumentBuilder.generateBatch(reportConfig, payload);
+  ui.alert('Merge Complete', `Documents generated successfully.\nFolder URL: ${batchResult.folderUrl}`, ui.ButtonSet.OK);
 }

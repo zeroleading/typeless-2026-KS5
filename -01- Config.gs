@@ -1,29 +1,57 @@
-/** * Config.gs 
- * Global Configuration File 
- * Acts as the single source of truth for the entire reporting system. 
+/**
+ * @fileoverview Global Configuration File.
+ * Acts as the immutable single source of truth for the entire reporting system,
+ * centralising folder identifiers, access-control lists, sheet naming conventions,
+ * and report-specific configuration profiles.
+ */
+
+/**
+ * Global configuration object for Typeless Reports.
+ * Wrapped in Object.freeze to prevent accidental runtime mutations across script executions.
+ * @type {Readonly<Object>}
  */
 const CONFIG = Object.freeze({
-  // 1. Global Settings
+  // ---------------------------------------------------------------------------
+  // 1. Global Drive Settings
+  // ---------------------------------------------------------------------------
   GLOBAL: {
+    // The default parent Drive folder where standard report batch subfolders are generated.
     OUTPUT_FOLDER_ID: '18JTL77flcaOV7Us93W_hJnf3_veATeFp',
   },
+
+  // ---------------------------------------------------------------------------
   // 2. Authorisation Controls
+  // ---------------------------------------------------------------------------
   AUTH: {
+    // Super users have full administrative access: setting up sheets, freezing/thawing,
+    // and running any report across Key Stages.
     SUPER_USERS: [
       'jappleton@csg.school',
       'tnayagam@csg.school'
     ],
-    REPORT_SPECIFIC: { UCAS: ['nbayley@csg.school'] }
+    // Role-specific access delegations to allow restricted staff members to run
+    // their respective workflows without exposing global administrative tools.
+    REPORT_SPECIFIC: { 
+      UCAS: ['nbayley@csg.school'] 
+    }
   },
+
+  // ---------------------------------------------------------------------------
   // 3. Import Sheet Controls
+  // ---------------------------------------------------------------------------
   IMPORT: {
     targetSheetName: 'import',
     backupSheetName: 'import-backup',
+    // Rows 6 & 7 house the array/lookup formulas that dynamically pull MIS data.
     anchorRowStart: 6,
     anchorRowCount: 2,
+    // Visual emoji indicator displaying whether the sheet is frozen (🥶) or live (🫠).
     statusCell: 'A1'
   },
-  // 4. Setup & Map Controls
+
+  // ---------------------------------------------------------------------------
+  // 4. Setup & Map Controls (Named Ranges on Control Panel)
+  // ---------------------------------------------------------------------------
   SCOPE: {
     subjectDetailsRange: 'scopeSubjectDetails',
     yearGroup: 'scopeYearGroup',
@@ -33,16 +61,21 @@ const CONFIG = Object.freeze({
     targetSubjectNameRange: 'thisSubjectName',
     shortName: 'scopeShortname',
     until: 'scopeAttUntil',
-    // New dynamic tables on the Control Panel
+    // Named ranges referencing dynamic header translation and mapping tables
     fieldMap: 'scopeFieldMap',
     translations: 'scopeTranslations'
   },
-  // 5. Fallback Field Mapper 
-  // Used only if the scopeFieldMap named range is missing or broken.
+
+  // ---------------------------------------------------------------------------
+  // 5. Fallback Field Mapper
+  // ---------------------------------------------------------------------------
+  // Serves as a failsafe dictionary in the event that the 'scopeFieldMap'
+  // named range on the spreadsheet Control Panel is altered, renamed, or corrupt.
   FALLBACK_FIELD_MAP: {
     tut_adno: 'adno',
     tut_attTpAs: 'attendance tpas',
     tut_latesTpAs: 'lates tpas',
+    tut_ucas_ref: '✎ ucas ref.',
     subj_adno: 'adno',
     subj_teacher: 'teacher',
     subj_stg: 'stg',
@@ -53,7 +86,7 @@ const CONFIG = Object.freeze({
     subj_ci4: 'ci4',
     subj_ns1: '≣ nextsteps1',
     subj_ns2: '≣ nextsteps2',
-    // --- KS5 Specific Additions ---
+    // KS5 Specific Additions
     subj_att: 'att %',
     subj_lates: 'lates',
     subj_eoy: 'eoy',
@@ -61,7 +94,12 @@ const CONFIG = Object.freeze({
     subj_ucas_ref: '✎ ucas ref.',
     subj_class_rank: 'rank'
   },
+
+  // ---------------------------------------------------------------------------
   // 6. Report Profiles
+  // ---------------------------------------------------------------------------
+  // Each profile encapsulates the template Google Doc ID and any report-specific
+  // destination overrides required by the document generation engine.
   REPORTS: {
     PROGRESS_REVIEW: {
       name: 'Progress Review',
@@ -71,10 +109,12 @@ const CONFIG = Object.freeze({
       name: 'Next Steps Summary',
       templateId: '1no4SLsNv1N74s9a5l_2Lo4qp1v6ZG-Hnfbvh51puTmw'
     },
-    // --- KS5 Specific Reports ---
     UCAS_REFERENCE: {
       name: 'UCAS Reference Collection',
-      templateId: 'PLACEHOLDER_UCAS_ID'
+      templateId: '1bPZxAa-K7oR9hin9cNVP0x6Lfzr9fu0ULPytN6zvrO4',
+      // The UCAS references must output to a dedicated destination folder
+      // rather than the general batch reporting folder.
+      outputFolderId: '13PHDtPVB97Yehk8znsccWmQEKpH8Aidr'
     },
     EOY_REPORT: {
       name: 'End of Year Report',

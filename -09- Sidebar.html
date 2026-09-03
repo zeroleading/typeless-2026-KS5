@@ -2,68 +2,70 @@
 <html>
   <head>
     <base target="_top">
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Clean typography matching standard reporting tools -->
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       body { 
         font-family: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-        padding: 16px; 
-        color: #4a4a4a; 
+        padding: 14px; 
+        color: #2d3748; 
         background-color: #fdfdfd;
+        margin: 0;
       }
-      .form-group { margin-bottom: 20px; }
+      .form-group { margin-bottom: 16px; }
       .input-label {
         font-weight: 600;
-        font-size: 0.9em;
+        font-size: 0.85em;
         color: #4a5568;
         display: block;
       }
       input[type="text"] { 
         width: 100%; 
-        padding: 10px 12px; 
+        padding: 8px 10px; 
         box-sizing: border-box; 
-        margin-top: 8px; 
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
+        margin-top: 6px; 
+        border: 1px solid #cbd5e0;
+        border-radius: 6px;
         background-color: #ffffff;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        font-size: 0.9em;
       }
       input[type="text"]:focus {
         outline: none;
         border-color: #0081af;
-        box-shadow: 0 0 0 3px rgba(0, 129, 175, 0.2);
+        box-shadow: 0 0 0 2px rgba(0, 129, 175, 0.2);
       }
-      .btn-container { display: flex; gap: 12px; margin-top: 16px; }
+      .btn-container { display: flex; gap: 8px; margin-top: 12px; }
       button { 
         flex: 1;
-        padding: 10px 14px; 
+        padding: 9px 12px; 
         cursor: pointer; 
         background-color: #0081af;
         color: #ffffff; 
         border: none; 
-        border-radius: 8px; 
-        font-size: 0.9em;
+        border-radius: 6px; 
+        font-size: 0.85em;
         font-weight: 600;
-        transition: background-color 0.2s ease, transform 0.1s ease;
+        transition: background-color 0.15s ease;
       }
       button:hover { background-color: #006b91; }
-      button:active { transform: translateY(1px); }
+      button:disabled { background-color: #a0aec0; cursor: not-allowed; }
       button.secondary { background-color: #edf2f7; color: #4a5568; }
       button.secondary:hover { background-color: #e2e8f0; }
-      #outputArea { 
-        margin-top: 24px; white-space: pre-wrap; font-size: 0.85em; 
-        background: #ffffff; padding: 16px; border: 1px solid #e2e8f0; 
-        border-radius: 8px; min-height: 100px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        line-height: 1.5;
+
+      .student-list { 
+        max-height: 180px; 
+        overflow-y: auto; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 6px; 
+        padding: 4px; 
+        margin-top: 8px; 
+        background: #ffffff; 
       }
-      .loader { display: none; margin-top: 16px; text-align: center; }
-      .success-link { color: #0081af; font-weight: 600; text-decoration: none; }
-      .success-link:hover { color: #006b91; text-decoration: underline; }
-      .student-list { max-height: 240px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; margin-top: 12px; background: #ffffff; }
       .student-item {
-        display: flex; align-items: center; gap: 10px; margin-bottom: 2px;
-        font-size: 0.85em; padding: 8px 8px 8px 12px; border-radius: 0 6px 6px 0;
-        transition: background-color 0.15s ease; cursor: pointer;
-        border-left: 4px solid transparent;
+        display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+        font-size: 0.8em; padding: 6px 8px; border-radius: 4px;
+        transition: background-color 0.1s ease; cursor: pointer;
+        border-left: 3px solid transparent;
       }
       .student-item:hover { background-color: #f7fafc; }
       .student-item.early-app {
@@ -74,77 +76,125 @@
       .filter-toggle {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-top: 12px;
-        font-size: 0.9em;
+        gap: 6px;
+        margin-top: 8px;
+        font-size: 0.8em;
         color: #4a5568;
         cursor: pointer;
       }
 
-      /* --- SPINNER ANIMATION --- */
+      /* Sectional Card Previews */
+      #outputArea { 
+        margin-top: 16px; 
+        background: #ffffff; 
+        padding: 12px; 
+        border: 1px solid #e2e8f0; 
+        border-radius: 6px; 
+        min-height: 80px;
+        font-size: 0.8em;
+        line-height: 1.45;
+      }
+      .preview-card {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .preview-card:last-child { margin-bottom: 0; }
+      .preview-title {
+        font-size: 0.85em;
+        font-weight: 700;
+        color: #0081af;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 6px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 4px;
+      }
+      .preview-body {
+        white-space: pre-wrap;
+        color: #2d3748;
+        font-family: inherit;
+        font-size: 0.95em;
+      }
+
+      /* Progress indicators and spinner animation */
       .spinner {
         display: inline-block;
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
         border: 2px solid rgba(0, 129, 175, 0.2);
         border-radius: 50%;
         border-top-color: #0081af;
         animation: spin 0.8s linear infinite;
         vertical-align: middle;
-        margin-right: 8px;
+        margin-right: 6px;
       }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
+      @keyframes spin { to { transform: rotate(360deg); } }
       .processing-text {
         display: inline-flex;
         align-items: center;
         color: #0081af;
         font-weight: 600;
       }
+      .success-link {
+        display: inline-block;
+        margin-top: 6px;
+        color: #0081af;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .success-link:hover { text-decoration: underline; }
     </style>
   </head>
   <body>
     <div class="form-group">
       <label for="searchInput" class="input-label">Search Students</label>
-      <input type="text" id="searchInput" onkeyup="filterList()" placeholder="Type name...">
+      <input type="text" id="searchInput" onkeyup="filterList()" placeholder="Search name or reg...">
       
       <label class="filter-toggle">
         <input type="checkbox" id="earlyAppFilter" onchange="filterList()" class="student-checkbox">
-        Show Early Apps Only
+        Show Early Applicants Only
       </label>
 
+      <!-- Dynamic list populated via RPC on load -->
       <div id="studentListContainer" class="student-list">
-        <span class="processing-text" style="padding: 8px;"><div class="spinner"></div> Fetching student data...</span>
+        <span class="processing-text" style="padding: 8px;"><div class="spinner"></div> Loading cohort...</span>
       </div>
     </div>
     
     <div class="btn-container">
-      <button class="secondary" onclick="getPreview()">Preview Text</button>
-      <button onclick="runMerge()">Run Merge</button>
+      <button class="secondary" onclick="getPreview()">Preview Sections</button>
+      <button onclick="runMerge()">Merge Reference</button>
     </div>
     
-    <div id="statusIndicator" class="loader"></div>
-    <div id="outputArea">Awaiting instruction...</div>
+    <div id="statusIndicator" style="display: none; margin-top: 12px; text-align: center;"></div>
+    <div id="outputArea">Select a student above to inspect their references.</div>
 
     <script>
       let allStudents = [];
 
+      // Initialise sidebar and fetch cohort directory on mount
       window.onload = function() {
         google.script.run
           .withSuccessHandler(function(students) {
             allStudents = students;
             renderList(allStudents);
           })
-          .withFailureHandler(function(err) {
-            document.getElementById('studentListContainer').innerHTML = '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load students.</span>';
+          .withFailureHandler(function() {
+            document.getElementById('studentListContainer').innerHTML = 
+              '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load cohort.</span>';
           })
           .sidebarGetStudentList();
       };
 
+      /**
+       * Renders student rows with early applicant styling.
+       */
       function renderList(students) {
         const container = document.getElementById('studentListContainer');
-        if (students.length === 0) {
+        if (!students || students.length === 0) {
           container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No students found.</span>';
           return;
         }
@@ -152,31 +202,41 @@
         let html = '';
         students.forEach(function(s) {
           const earlyAppClass = s.earlyApp ? ' early-app' : '';
+          const tag = s.earlyApp ? ' <b>[Early]</b>' : '';
           html += '<label class="student-item' + earlyAppClass + '">' +
                   '<input type="checkbox" class="student-checkbox" value="' + s.adNo + '">' +
-                  s.name +
+                  s.name + ' (' + s.reg + ')' + tag +
                   '</label>';
         });
         container.innerHTML = html;
       }
 
+      /**
+       * Filters student list dynamically by surname/forename/reg and early-applicant toggle.
+       */
       function filterList() {
         const term = document.getElementById('searchInput').value.toLowerCase();
         const showOnlyEarlyApps = document.getElementById('earlyAppFilter').checked;
         
         const filtered = allStudents.filter(function(s) {
-          const matchesText = s.name.toLowerCase().includes(term);
+          const matchesText = s.name.toLowerCase().includes(term) || s.reg.toLowerCase().includes(term);
           const matchesEarlyApp = showOnlyEarlyApps ? s.earlyApp === true : true;
           return matchesText && matchesEarlyApp;
         });
         renderList(filtered);
       }
 
+      /**
+       * Harvests checked admission numbers from the list.
+       */
       function getSelectedAdnos() {
         const checkboxes = document.querySelectorAll('.student-checkbox:checked');
-        return Array.from(checkboxes).map(cb => cb.value);
+        return Array.from(checkboxes).map(function(cb) { return cb.value; });
       }
 
+      /**
+       * Updates the status container with loading messages or feedback.
+       */
       function setStatus(msg, isLoading) {
         const indicator = document.getElementById('statusIndicator');
         const output = document.getElementById('outputArea');
@@ -184,13 +244,15 @@
         if (isLoading) {
           indicator.style.display = 'block';
           indicator.innerHTML = '<span class="processing-text"><div class="spinner"></div> ' + msg + '</span>';
-          output.innerHTML = '';
         } else {
           indicator.style.display = 'none';
           if (msg) output.innerHTML = msg;
         }
       }
 
+      /**
+       * Fetches and displays sectional cards (Section 2, 3, 4) for a single student.
+       */
       function getPreview() {
         const selected = getSelectedAdnos();
         if (selected.length === 0) {
@@ -198,27 +260,51 @@
           return;
         }
         if (selected.length > 1) {
-          setStatus('<span style="color:#e53e3e;">Preview is only available for a single student. Please select only one.</span>', false);
+          setStatus('<span style="color:#e53e3e;">Section preview is only available for a single student. Please uncheck extras.</span>', false);
           return;
         }
 
-        setStatus('Fetching preview data...', true);
+        setStatus('Collating sections...', true);
         
         google.script.run
           .withSuccessHandler(function(result) {
             setStatus('', false);
             if (result.error) {
               document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + result.error + '</span>';
-            } else {
-              document.getElementById('outputArea').innerHTML = '<strong style="color: #2d3748; font-size: 1.1em;">' + result.name + '</strong><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0;">' + result.previewText;
+              return;
             }
+
+            const headerHtml = '<strong style="font-size: 1.05em; color: #1a202c;">' + result.name + ' (' + result.reg + ')</strong><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0 12px 0;">';
+            
+            // Section 2: Tutor extenuating circumstances card
+            const tutorCard = '<div class="preview-card">' +
+                              '<div class="preview-title">Section 2: Extenuating Circumstances (Tutor)</div>' +
+                              '<div class="preview-body">' + (result.tutorRef || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                              '</div>';
+
+            // Section 3: Subject suitability narrative card
+            const subjectCard = '<div class="preview-card">' +
+                                '<div class="preview-title">Section 3: Course Suitability (Subjects)</div>' +
+                                '<div class="preview-body">' + (result.subjectRefs || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                                '</div>';
+
+            // Section 4: Predicted grades summary card
+            const predCard = '<div class="preview-card">' +
+                             '<div class="preview-title">Section 4: Predicted Grades</div>' +
+                             '<div class="preview-body">' + (result.predictions || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                             '</div>';
+
+            document.getElementById('outputArea').innerHTML = headerHtml + tutorCard + subjectCard + predCard;
           })
           .withFailureHandler(function(err) {
-            setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
+            setStatus('<span style="color:#e53e3e;">Error: ' + err.message + '</span>', false);
           })
           .sidebarGetUcasPreview(selected[0]);
       }
 
+      /**
+       * Executes on-demand document generation for the selected admission numbers.
+       */
       function runMerge() {
         const selected = getSelectedAdnos();
         if (selected.length === 0) {
@@ -226,25 +312,34 @@
           return;
         }
 
-        setStatus('Merging documents...', true);
-        
-        const adnoString = selected.join(',');
+        setStatus('Merging references to Google Docs...', true);
         
         google.script.run
-          .withSuccessHandler(function(url) {
+          .withSuccessHandler(function(res) {
             setStatus('', false);
-            if (url.startsWith('http')) {
-              document.getElementById('outputArea').innerHTML = 
-                '<strong style="color:#48bb78; font-size: 1.1em;">Merge Complete!</strong><br><br>' + 
-                '<a href="' + url + '" target="_blank" class="success-link">View Generated Folder &rarr;</a>';
-            } else {
-              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + url + '</span>';
+            if (res.error) {
+              document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + res.error + '</span>';
+              return;
             }
+
+            let html = '<strong style="color:#38a169; font-size: 1.05em;">Generation Successful!</strong><br>' +
+                       '<span style="color:#4a5568;">Created ' + res.count + ' document(s).</span><br><br>';
+
+            // Provide direct document link for single-student merges
+            if (res.docUrl) {
+              html += '<a href="' + res.docUrl + '" target="_blank" class="success-link">Open Generated Document &rarr;</a><br>';
+            }
+            // Provide destination folder link for batch merges
+            if (res.folderUrl) {
+              html += '<a href="' + res.folderUrl + '" target="_blank" class="success-link">Open Destination Folder &rarr;</a>';
+            }
+            
+            document.getElementById('outputArea').innerHTML = html;
           })
           .withFailureHandler(function(err) {
             setStatus('<span style="color:#e53e3e;">System Error: ' + err.message + '</span>', false);
           })
-          .sidebarRunUcasMerge(adnoString);
+          .sidebarRunUcasMerge(selected.join(','));
       }
     </script>
   </body>
