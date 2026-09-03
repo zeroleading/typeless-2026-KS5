@@ -208,6 +208,19 @@ function sidebarGetStudentList() {
 }
 
 /**
+ * Fetches the comprehensive cohort UCAS dataset for client-side caching.
+ * Invoked asynchronously in the background upon sidebar initialisation.
+ * @return {Object<string, Object>|Object} Map of admission numbers to reference payloads or error object.
+ */
+function sidebarGetCohortUcasData() {
+  try {
+    return DataService.getCohortUcasData(CONFIG.REPORTS.UCAS_REFERENCE);
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/**
  * Fetches structured, multi-section preview data for a single student.
  * Enables the coordinator to review Section 2 (Tutor), Section 3 (Subjects),
  * and Section 4 (Predictions) prior to running a merge.

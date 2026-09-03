@@ -118,6 +118,54 @@ const DataService = {
   },
 
   /**
+   * Compiles the full cohort's UCAS references in a single operation.
+   * Transmits a structured map to the client sidebar for zero-latency
+   * in-memory previewing and real-time completeness filtering.
+   * @param {Object} reportConfig The UCAS report configuration object.
+   * @return {Object<string, Object>} Student dictionary keyed by admission number.
+   */
+  getCohortUcasData: function(reportConfig) {
+    const payload = this.buildStudentDataPayload(reportConfig);
+    const cohortCache = {};
+
+    payload.forEach(student => {
+      // Extract tutor contextual comments
+      const tutorRef = (student.tutorInfo && student.tutorInfo.ucasRef) 
+        ? String(student.tutorInfo.ucasRef).trim() 
+        : '';
+
+      // Format subject suitability references and predictions
+      const subjectRefs = this.formatUcasSubjectReferences(student.subjects);
+      const predictions = this.formatUcasPredictions(student.subjects);
+
+      // Evaluate application completeness to drive the wildcard audit filter
+      const missingElements = [];
+      if (!tutorRef) missingElements.push('Tutor Ref');
+      if (!subjectRefs) missingElements.push('Subject Refs');
+      if (!predictions) missingElements.push('Predictions');
+      if (student.auditIssues && student.auditIssues.length > 0) {
+        missingElements.push(...student.auditIssues);
+      }
+
+      const isComplete = missingElements.length === 0;
+
+      cohortCache[String(student.adNo)] = {
+        name: student.name,
+        adNo: student.adNo,
+        reg: student.reg,
+        earlyApp: student.earlyApp,
+        tutorRef: tutorRef,
+        subjectRefs: subjectRefs,
+        predictions: predictions,
+        isComplete: isComplete,
+        missingSummary: missingElements.join(', ')
+      };
+    });
+
+    return cohortCache;
+  },
+
+  /**
    * Formats subject references into the required UCAS narrative block.
    * Template specification:
    *   ${subj.subjectName}

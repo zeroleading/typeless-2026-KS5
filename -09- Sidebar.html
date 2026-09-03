@@ -34,6 +34,73 @@
         border-color: #0081af;
         box-shadow: 0 0 0 2px rgba(0, 129, 175, 0.2);
       }
+      .toolbar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2px;
+      }
+      .refresh-btn {
+        background: none;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        padding: 3px 8px;
+        font-size: 0.75em;
+        color: #4a5568;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+      }
+      .refresh-btn:hover {
+        background-color: #edf2f7;
+        border-color: #a0aec0;
+        color: #2d3748;
+      }
+      .filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.8em;
+        color: #4a5568;
+        cursor: pointer;
+      }
+      .sync-indicator {
+        font-size: 0.72em;
+        color: #718096;
+        margin-top: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .sync-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background-color: #cbd5e0;
+        display: inline-block;
+      }
+      .sync-dot.active { background-color: #38a169; }
+      .sync-dot.loading { background-color: #d69e2e; animation: pulse 1s infinite; }
+      @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+
+      .badge {
+        font-size: 0.75em;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-weight: 600;
+        margin-left: 4px;
+      }
+      .badge-early { background-color: #ebf8ff; color: #0081af; }
+      .badge-incomplete { background-color: #fffaf0; color: #dd6b20; }
+      
       .btn-container { display: flex; gap: 8px; margin-top: 12px; }
       button { 
         flex: 1;
@@ -73,15 +140,6 @@
         background-color: #f0f8fb;
       }
       .student-checkbox { accent-color: #0081af; cursor: pointer; }
-      .filter-toggle {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 8px;
-        font-size: 0.8em;
-        color: #4a5568;
-        cursor: pointer;
-      }
 
       /* Sectional Card Previews */
       #outputArea { 
@@ -150,13 +208,29 @@
   </head>
   <body>
     <div class="form-group">
-      <label for="searchInput" class="input-label">Search Students</label>
+      <div class="toolbar-header">
+        <label for="searchInput" class="input-label">Search Students</label>
+        <button id="refreshBtn" class="refresh-btn" onclick="refreshAllData()" title="Re-synchronise with sheets">
+          &#x21bb; Refresh Data
+        </button>
+      </div>
       <input type="text" id="searchInput" onkeyup="filterList()" placeholder="Search name or reg...">
       
-      <label class="filter-toggle">
-        <input type="checkbox" id="earlyAppFilter" onchange="filterList()" class="student-checkbox">
-        Show Early Applicants Only
-      </label>
+      <div class="filter-group">
+        <label class="filter-toggle">
+          <input type="checkbox" id="earlyAppFilter" onchange="filterList()">
+          Early Apps Only
+        </label>
+        <label class="filter-toggle">
+          <input type="checkbox" id="incompleteFilter" onchange="filterList()">
+          Incomplete Only
+        </label>
+      </div>
+
+      <div class="sync-indicator">
+        <span id="syncDot" class="sync-dot"></span>
+        <span id="syncStatus">Initialising cohort...</span>
+      </div>
 
       <!-- Dynamic list populated via RPC on load -->
       <div id="studentListContainer" class="student-list">
@@ -174,63 +248,147 @@
 
     <script>
       let allStudents = [];
+      let cohortCache = null;
+      let isPreloadingCache = false;
 
       // Initialise sidebar and fetch cohort directory on mount
       window.onload = function() {
+        loadStudentDirectory(function() {
+          preloadCohortData();
+        });
+      };
+
+      /**
+       * Stage 1: Fetches the lightweight student directory immediately.
+       */
+      function loadStudentDirectory(callback) {
         google.script.run
           .withSuccessHandler(function(students) {
             allStudents = students;
             renderList(allStudents);
+            if (callback) callback();
           })
           .withFailureHandler(function() {
             document.getElementById('studentListContainer').innerHTML = 
               '<span style="color:#e53e3e; padding: 8px; display: block;">Failed to load cohort.</span>';
           })
           .sidebarGetStudentList();
-      };
+      }
 
       /**
-       * Renders student rows with early applicant styling.
+       * Stage 2: Preloads complete reference payloads into browser memory.
+       */
+      function preloadCohortData() {
+        setSyncStatus('Synchronising references in background...', 'loading');
+        isPreloadingCache = true;
+
+        google.script.run
+          .withSuccessHandler(function(cache) {
+            isPreloadingCache = false;
+            if (cache && !cache.error) {
+              cohortCache = cache;
+              setSyncStatus('References synchronised in memory', 'active');
+              renderList(allStudents); // Re-render to show completeness badges
+            } else {
+              setSyncStatus('Background sync encountered an issue', '');
+            }
+          })
+          .withFailureHandler(function() {
+            isPreloadingCache = false;
+            setSyncStatus('Sync paused. Previews will fetch on-demand.', '');
+          })
+          .sidebarGetCohortUcasData();
+      }
+
+      /**
+       * Refreshes both the directory and in-memory cache on demand.
+       */
+      function refreshAllData() {
+        const btn = document.getElementById('refreshBtn');
+        btn.disabled = true;
+        btn.innerHTML = '&#x21bb; Syncing...';
+        cohortCache = null;
+
+        loadStudentDirectory(function() {
+          preloadCohortData();
+          btn.disabled = false;
+          btn.innerHTML = '&#x21bb; Refresh Data';
+        });
+      }
+
+      /**
+       * Updates the subtle synchronization indicator pill.
+       */
+      function setSyncStatus(text, stateClass) {
+        const dot = document.getElementById('syncDot');
+        const label = document.getElementById('syncStatus');
+        dot.className = 'sync-dot' + (stateClass ? ' ' + stateClass : '');
+        label.innerText = text;
+      }
+
+      /**
+       * Renders student rows with early applicant and completeness indicators.
        */
       function renderList(students) {
         const container = document.getElementById('studentListContainer');
         if (!students || students.length === 0) {
-          container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No students found.</span>';
+          container.innerHTML = '<span style="color: #a0aec0; font-style: italic; padding: 8px; display: block;">No matching students found.</span>';
           return;
         }
         
         let html = '';
         students.forEach(function(s) {
+          const adNoKey = String(s.adNo);
+          const cached = cohortCache ? cohortCache[adNoKey] : null;
+          
           const earlyAppClass = s.earlyApp ? ' early-app' : '';
-          const tag = s.earlyApp ? ' <b>[Early]</b>' : '';
+          let badges = '';
+          
+          if (s.earlyApp) {
+            badges += '<span class="badge badge-early">Early</span>';
+          }
+          if (cached && !cached.isComplete) {
+            badges += '<span class="badge badge-incomplete" title="' + (cached.missingSummary || 'Missing sections') + '">Incomplete</span>';
+          }
+
           html += '<label class="student-item' + earlyAppClass + '">' +
                   '<input type="checkbox" class="student-checkbox" value="' + s.adNo + '">' +
-                  s.name + ' (' + s.reg + ')' + tag +
+                  s.name + ' (' + s.reg + ')' + badges +
                   '</label>';
         });
         container.innerHTML = html;
       }
 
       /**
-       * Filters student list dynamically by surname/forename/reg and early-applicant toggle.
+       * Filters student list dynamically by query text, early-app, and completeness.
        */
       function filterList() {
         const term = document.getElementById('searchInput').value.toLowerCase();
         const showOnlyEarlyApps = document.getElementById('earlyAppFilter').checked;
+        const showOnlyIncomplete = document.getElementById('incompleteFilter').checked;
         
         const filtered = allStudents.filter(function(s) {
           const matchesText = s.name.toLowerCase().includes(term) || s.reg.toLowerCase().includes(term);
           const matchesEarlyApp = showOnlyEarlyApps ? s.earlyApp === true : true;
-          return matchesText && matchesEarlyApp;
+          
+          let matchesIncomplete = true;
+          if (showOnlyIncomplete) {
+            const cached = cohortCache ? cohortCache[String(s.adNo)] : null;
+            matchesIncomplete = cached ? !cached.isComplete : true;
+          }
+          
+          return matchesText && matchesEarlyApp && matchesIncomplete;
         });
         renderList(filtered);
       }
 
       /**
-       * Harvests checked admission numbers from the list.
+       * Harvests checked admission numbers exclusively from the student list container.
+       * Fixes the previous bug where auxiliary filter toggles were erroneously included.
        */
       function getSelectedAdnos() {
-        const checkboxes = document.querySelectorAll('.student-checkbox:checked');
+        const container = document.getElementById('studentListContainer');
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
         return Array.from(checkboxes).map(function(cb) { return cb.value; });
       }
 
@@ -251,7 +409,7 @@
       }
 
       /**
-       * Fetches and displays sectional cards (Section 2, 3, 4) for a single student.
+       * Displays Section 2, 3, and 4 cards, resolving from memory instantaneously.
        */
       function getPreview() {
         const selected = getSelectedAdnos();
@@ -264,7 +422,16 @@
           return;
         }
 
-        setStatus('Collating sections...', true);
+        const targetAdNo = selected[0];
+
+        // 1. Instant resolution from browser memory if background cache is ready
+        if (cohortCache && cohortCache[String(targetAdNo)]) {
+          renderSectionalPreview(cohortCache[String(targetAdNo)]);
+          return;
+        }
+
+        // 2. Graceful fallback if background synchronization is still in progress
+        setStatus(isPreloadingCache ? 'Finalising cohort collation in memory...' : 'Collating sections...', true);
         
         google.script.run
           .withSuccessHandler(function(result) {
@@ -273,33 +440,39 @@
               document.getElementById('outputArea').innerHTML = '<span style="color:#e53e3e;">' + result.error + '</span>';
               return;
             }
-
-            const headerHtml = '<strong style="font-size: 1.05em; color: #1a202c;">' + result.name + ' (' + result.reg + ')</strong><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0 12px 0;">';
-            
-            // Section 2: Tutor extenuating circumstances card
-            const tutorCard = '<div class="preview-card">' +
-                              '<div class="preview-title">Section 2: Extenuating Circumstances (Tutor)</div>' +
-                              '<div class="preview-body">' + (result.tutorRef || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                              '</div>';
-
-            // Section 3: Subject suitability narrative card
-            const subjectCard = '<div class="preview-card">' +
-                                '<div class="preview-title">Section 3: Course Suitability (Subjects)</div>' +
-                                '<div class="preview-body">' + (result.subjectRefs || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                                '</div>';
-
-            // Section 4: Predicted grades summary card
-            const predCard = '<div class="preview-card">' +
-                             '<div class="preview-title">Section 4: Predicted Grades</div>' +
-                             '<div class="preview-body">' + (result.predictions || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
-                             '</div>';
-
-            document.getElementById('outputArea').innerHTML = headerHtml + tutorCard + subjectCard + predCard;
+            renderSectionalPreview(result);
           })
           .withFailureHandler(function(err) {
             setStatus('<span style="color:#e53e3e;">Error: ' + err.message + '</span>', false);
           })
-          .sidebarGetUcasPreview(selected[0]);
+          .sidebarGetUcasPreview(targetAdNo);
+      }
+
+      /**
+       * Helper rendering structured preview cards into the output container.
+       */
+      function renderSectionalPreview(data) {
+        const headerHtml = '<strong style="font-size: 1.05em; color: #1a202c;">' + data.name + ' (' + data.reg + ')</strong><hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0 12px 0;">';
+        
+        // Section 2: Tutor extenuating circumstances card
+        const tutorCard = '<div class="preview-card">' +
+                          '<div class="preview-title">Section 2: Extenuating Circumstances (Tutor)</div>' +
+                          '<div class="preview-body">' + (data.tutorRef || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                          '</div>';
+
+        // Section 3: Subject suitability narrative card
+        const subjectCard = '<div class="preview-card">' +
+                            '<div class="preview-title">Section 3: Course Suitability (Subjects)</div>' +
+                            '<div class="preview-body">' + (data.subjectRefs || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                            '</div>';
+
+        // Section 4: Predicted grades summary card
+        const predCard = '<div class="preview-card">' +
+                         '<div class="preview-title">Section 4: Predicted Grades</div>' +
+                         '<div class="preview-body">' + (data.predictions || '<span style="color:#a0aec0; font-style:italic;">None recorded</span>') + '</div>' +
+                         '</div>';
+
+        document.getElementById('outputArea').innerHTML = headerHtml + tutorCard + subjectCard + predCard;
       }
 
       /**
@@ -325,11 +498,11 @@
             let html = '<strong style="color:#38a169; font-size: 1.05em;">Generation Successful!</strong><br>' +
                        '<span style="color:#4a5568;">Created ' + res.count + ' document(s).</span><br><br>';
 
-            // Provide direct document link for single-student merges
+            // Direct document link for single-student merges
             if (res.docUrl) {
               html += '<a href="' + res.docUrl + '" target="_blank" class="success-link">Open Generated Document &rarr;</a><br>';
             }
-            // Provide destination folder link for batch merges
+            // Destination folder link for batch merges
             if (res.folderUrl) {
               html += '<a href="' + res.folderUrl + '" target="_blank" class="success-link">Open Destination Folder &rarr;</a>';
             }
