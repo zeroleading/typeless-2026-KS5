@@ -138,16 +138,45 @@ const DataService = {
       const subjectRefs = this.formatUcasSubjectReferences(student.subjects);
       const predictions = this.formatUcasPredictions(student.subjects);
 
-      // Evaluate application completeness to drive the wildcard audit filter
+      // Evaluate application completeness based on user specifications:
+      // 1. All students require a tutor reference.
+      // 2. Every subject requires both a predicted grade and a reference.
       const missingElements = [];
-      if (!tutorRef) missingElements.push('Tutor Ref');
-      if (!subjectRefs) missingElements.push('Subject Refs');
-      if (!predictions) missingElements.push('Predictions');
-      if (student.auditIssues && student.auditIssues.length > 0) {
-        missingElements.push(...student.auditIssues);
+      
+      const hasTutorRef = tutorRef.length > 0;
+      if (!hasTutorRef) {
+        missingElements.push('Tutor Reference');
+      }
+
+      const totalSubjects = (student.subjects || []).length;
+      let subjectsWithRef = 0;
+      let subjectsWithPred = 0;
+
+      (student.subjects || []).forEach(subj => {
+        const hasRef = Boolean(subj.ucasRef && String(subj.ucasRef).trim() !== '');
+        const hasPred = Boolean(subj.ucas && String(subj.ucas).trim() !== '');
+
+        if (hasRef) subjectsWithRef++;
+        if (hasPred) subjectsWithPred++;
+
+        if (!hasRef && !hasPred) {
+          missingElements.push(`${subj.subjectName} (Ref & Grade)`);
+        } else if (!hasRef) {
+          missingElements.push(`${subj.subjectName} (Ref)`);
+        } else if (!hasPred) {
+          missingElements.push(`${subj.subjectName} (Grade)`);
+        }
+      });
+
+      if (totalSubjects === 0) {
+        missingElements.push('No subjects found');
       }
 
       const isComplete = missingElements.length === 0;
+
+      // Construct compact progress metric (e.g., "Refs: 3/3 | Preds: 3/3 | Tutor: ✓")
+      const tutorStatus = hasTutorRef ? '✓' : '✕';
+      const progressSummary = `Refs: ${subjectsWithRef}/${totalSubjects} | Preds: ${subjectsWithPred}/${totalSubjects} | Tutor: ${tutorStatus}`;
 
       cohortCache[String(student.adNo)] = {
         name: student.name,
@@ -158,7 +187,8 @@ const DataService = {
         subjectRefs: subjectRefs,
         predictions: predictions,
         isComplete: isComplete,
-        missingSummary: missingElements.join(', ')
+        missingSummary: missingElements.join(', '),
+        progressSummary: progressSummary
       };
     });
 
@@ -431,8 +461,8 @@ const DataService = {
         if (reportConfig.name === CONFIG.REPORTS.EOY_REPORT.name) {
           if (rawEoy === '') missingElements.push('EOY');
         } else if (reportConfig.name === CONFIG.REPORTS.UCAS_REFERENCE.name) {
+          // Only predicted grade and teacher reference are strictly mandatory for completeness
           if (rawUcas === '') missingElements.push('UCAS Grade');
-          if (rawClassRank === '') missingElements.push('Class Rank');
           if (rawUcasRef === '') missingElements.push('UCAS Ref');
         } else {
           // Standard Progress Review audits

@@ -135,7 +135,8 @@ const DocumentBuilder = {
     if (reportName === CONFIG.REPORTS.EOY_REPORT.name) {
       return subj.eoy !== '';
     } else if (reportName === CONFIG.REPORTS.UCAS_REFERENCE.name) {
-      return subj.ucas !== '' && subj.classRank !== '' && subj.ucasRef !== '';
+      // EOY and rank are supplementary; completeness strictly requires a predicted grade and reference narrative
+      return subj.ucas !== '' && subj.ucasRef !== '';
     } else {
       // Progress Reviews and Next Steps Summaries require CRNT, CI indicators, and at least one Next Step
       return subj.crnt !== '' &&
