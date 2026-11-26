@@ -41,6 +41,7 @@ const CONFIG = Object.freeze({
   // ---------------------------------------------------------------------------
   IMPORT: {
     targetSheetName: 'import',
+    accessSheetName: 'access',
     backupSheetName: 'import-backup',
     // Rows 6 & 7 house the array/lookup formulas that dynamically pull MIS data.
     anchorRowStart: 6,
